@@ -16,6 +16,8 @@ namespace Nashet.EconomicSimulation
 
         //static Modifier modifierDefenseInMountains = new Modifier(x => (x as Army).isInDefense() && (x as Army).getDestination()!=null && (x as Army).getDestination().getTerrain() == TerrainTypes.Mountains, "Defense in mountains", 0.2f, false);
         private static Modifier modifierMorale = new Modifier(x => (x as Army).GetAverageCorps(y => y.getMorale()).get(), "Morale", 1f, true);
+        private static Modifier modifierClimbing = new Modifier(x => (x as Army).isAttackingHighGround(), "Attacking from below", -1f, false);
+        private static Modifier modifierDescending = new Modifier(x => (x as Army).hasTheHighGround(), "Attacking from above", 1f, false);
 
         private static Modifier modifierHorses = new Modifier(x => (x as Army).getHorsesSupply(), "Horses", 0.5f, false);
         private static Modifier modifierColdArms = new Modifier(x => (x as Army).getColdArmsSupply(), "Cold arms", 1f, false);
@@ -103,7 +105,7 @@ namespace Nashet.EconomicSimulation
         //modifierDefenseInMountains
             Modifier.modifierDefault1, modifierInDefense,  modifierMorale, modifierHorses, modifierColdArms,
         modifierFirearms, modifierArtillery, modifierCars, modifierTanks, modifierAirplanes, modifierLuck,
-        modifierEducation
+        modifierEducation, modifierClimbing, modifierDescending
         });
 
         // private Army consolidatedArmy;
@@ -543,6 +545,20 @@ namespace Nashet.EconomicSimulation
         public bool isInDefense()
         {
             return destination == null;
+        }
+
+        public bool isAttackingHighGround()
+        {
+            return !isInDefense() && destination.getTerrain() == Province.TerrainTypes.Mountains;
+        }
+
+        public bool hasTheHighGround()
+        {
+            return !isAttackingHighGround() &&
+                   destination != null &&
+                   destination.getAllNeighbors().Any(p =>
+                       (p as Province).isBelongsTo(owner.Country) &&
+                       p.getTerrain() == Province.TerrainTypes.Mountains);
         }
 
         public float getStrenghtModifier()

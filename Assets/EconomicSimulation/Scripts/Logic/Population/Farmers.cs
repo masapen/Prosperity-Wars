@@ -23,7 +23,9 @@ namespace Nashet.EconomicSimulation
 
         public override void produce()
         {
-            Storage producedAmount = new Storage(Type.getBasicProduction().Product, population.Get() * Type.getBasicProduction().get() / 1000f);
+            float productionCount = population.Get() * Type.getBasicProduction().get() / 1000f;
+            var fertilityFactor = Province.getSoilFertility() / 50000.0f; 
+            Storage producedAmount = new Storage(Type.getBasicProduction().Product, productionCount * fertilityFactor);
             producedAmount.Multiply(modEfficiency.getModifier(this), false); // could be negative with bad modifiers, defaults to zero
             if (producedAmount.isNotZero())
             {

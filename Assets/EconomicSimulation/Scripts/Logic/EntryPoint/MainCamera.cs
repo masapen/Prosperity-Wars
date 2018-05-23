@@ -12,7 +12,7 @@ namespace Nashet.EconomicSimulation
 
 
         [SerializeField]
-        private float xzCameraSpeed = 2f;
+        private float xzCameraSpeed = 20f;
 
         [SerializeField]
         private float yCameraSpeed = -55f;
@@ -60,21 +60,34 @@ namespace Nashet.EconomicSimulation
         {
             var position = transform.position;
             var mapBorders = game.getMapBorders();
+            var dt = Time.deltaTime;
+            var zoomFactor = (position.z + 540f) / 250f;
 
+            float xDelta = xMove * xzCameraSpeed + position.x;
+            float xMaxLimit = mapBorders.width + 100f;
+            float xMinLimit = mapBorders.x - 100f;
+            
+            float yDelta = yMove * xzCameraSpeed + position.y;
+            float yMaxLimit = mapBorders.height + 100;
+            float yMinLimit = mapBorders.y - 100f;
+            
+            if (xDelta < xMinLimit) xMove = -Math.Max(0, xDelta - xMinLimit);
+            else if(xDelta > xMaxLimit) xMove = -Math.Max(0, xDelta - xMaxLimit);
 
-            if (xMove * xzCameraSpeed + position.x < mapBorders.x
-                || xMove * xzCameraSpeed + position.x > mapBorders.width)
-                xMove = 0;
+            if (yDelta < yMinLimit) yMove = -Math.Max(0, yDelta - yMinLimit);
+            else if (yDelta > yMaxLimit) yMove = -Math.Max(0, yDelta - yMaxLimit);
+            //    || xMove * xzCameraSpeed + position.x > mapBorders.width)
+            //    xMove = 0;
 
-            if (yMove * xzCameraSpeed + position.y < mapBorders.y
+            /*if (yMove * xzCameraSpeed + position.y < mapBorders.y
                 || yMove * xzCameraSpeed + position.y > mapBorders.height)
-                yMove = 0;
+                yMove = 0;*/
 
             zMove = zMove * yCameraSpeed;
             if (position.z + zMove > -40f
                 || position.z + zMove < -500f)
                 zMove = 0f;
-            transform.Translate(xMove * xzCameraSpeed, yMove * xzCameraSpeed, zMove, Space.World);
+            transform.Translate(xMove * xzCameraSpeed * dt, yMove * xzCameraSpeed * dt, zMove, Space.World);
         }
 
         private void FixedUpdate()
@@ -125,7 +138,7 @@ namespace Nashet.EconomicSimulation
             }
 #if !UNITY_WEBGL
                 else // multi-threading
-                    loadingPanel.updateStatus(game.getStatus());
+                    loadingPanel?.updateStatus(game.getStatus());
 #endif
             if (gameLoadingIsFinished)
             {

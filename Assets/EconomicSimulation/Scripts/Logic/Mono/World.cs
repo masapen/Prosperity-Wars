@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using Nashet.Utils;
 using Nashet.ValueSpace;
 using UnityEngine;
@@ -26,6 +27,8 @@ namespace Nashet.EconomicSimulation
 
         public static Market market;
         public Graph graph;
+        private static System.Random randomGenerator = new System.Random();
+        
 
 
         private static World thisObject;
@@ -156,7 +159,8 @@ namespace Nashet.EconomicSimulation
                         //&& !blockedProvinces.Contains(currentProvinceColor)
                         && !isProvinceCreated(currentProvinceColor))
                     {
-                        allProvinces.Add(new Province(nameGenerator.generateProvinceName(), provinceCounter, currentProvinceColor, Product.getRandomResource(false)));
+                        int nextFertility = randomGenerator.Next(100, 100001);
+                        allProvinces.Add(new Province(nameGenerator.generateProvinceName(), provinceCounter, currentProvinceColor, Product.getRandomResource(false), nextFertility));
                         provinceCounter++;
                     }
                     currentProvinceColor = image.GetPixel(i, j);

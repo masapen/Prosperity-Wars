@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Text;
 using Nashet.UnityUIUtils;
 using Nashet.Utils;
@@ -137,14 +138,17 @@ namespace Nashet.EconomicSimulation
             sb.Append("\nPopulation (with families): ").Append(Game.selectedProvince.getFamilyPopulation());
 
             sb.Append("\nAverage loyalty: ").Append(Game.selectedProvince.GetAllPopulation().GetAverageProcent(x => x.loyalty));
-            //sb.Append("\nMajor culture: ").Append(Game.selectedProvince.getMajorCulture());
-            //sb.Append("\nGDP: ").Append(Game.selectedProvince.getGDP());
+            sb.Append("\nMajor culture: ").Append(Game.selectedProvince.getMajorCulture());
+            sb.Append("\nGDP: ").Append(Game.selectedProvince.getGDP());
             sb.Append("\nResource: ");
             if (Game.selectedProvince.getResource() == null)
                 sb.Append("none ");
             else
                 sb.Append(Game.selectedProvince.getResource());
-            //sb.Append("\nTerrain: ").Append(Game.selectedProvince.getTerrain());
+            sb.Append("\nTerrain: ").Append(Game.selectedProvince.getTerrain());
+            sb.Append("\nLife Value: ")
+                .Append(Math.Round((Game.selectedProvince.getSoilFertility() / 50000.0f) * 100))
+                .Append("%");
             //sb.Append("\nRural overpopulation: ").Append(Game.selectedProvince.GetOverpopulation());
             sb.Append("\nCores: ").Append(Game.selectedProvince.getCoresDescription());
             

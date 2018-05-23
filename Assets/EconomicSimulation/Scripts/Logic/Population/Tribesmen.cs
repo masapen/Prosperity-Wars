@@ -27,10 +27,13 @@ namespace Nashet.EconomicSimulation
         {
             Storage producedAmount;
             var overpopulation = Province.GetOverpopulation();
+            var fertilityFactor = Province.getSoilFertility() / 50000.0f; 
             if (overpopulation.isSmallerOrEqual(Procent.HundredProcent)) // all is OK
-                producedAmount = new Storage(Type.getBasicProduction().Product, Type.getBasicProduction().Multiply(population.Get()).Divide(1000));
+                producedAmount = new Storage(Type.getBasicProduction().Product, 
+                    Type.getBasicProduction().Multiply(population.Get()).Divide(1000).Multiply(fertilityFactor));
             else
-                producedAmount = new Storage(Type.getBasicProduction().Product, Type.getBasicProduction().Multiply(population.Get()).Divide(1000).Divide(overpopulation));
+                producedAmount = new Storage(Type.getBasicProduction().Product, 
+                    Type.getBasicProduction().Multiply(population.Get()).Divide(1000).Multiply(fertilityFactor).Divide(overpopulation));
 
             if (producedAmount.isNotZero())
             {

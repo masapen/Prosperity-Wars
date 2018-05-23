@@ -63,7 +63,7 @@ namespace Nashet.EconomicSimulation
 
         private readonly List<Factory> allFactories = new List<Factory>();
 
-        private readonly int fertileSoil;
+        private int fertileSoil;
         private readonly List<Country> cores = new List<Country>();
         private readonly Dictionary<Province, MeshRenderer> bordersMeshes = new Dictionary<Province, MeshRenderer>();
         private TerrainTypes terrain;
@@ -71,14 +71,14 @@ namespace Nashet.EconomicSimulation
 
         //private readonly float nameWeight;
         //empty province constructor
-        public Province(string name, int iID, Color icolorID, Product resource) : base(name)
+        public Province(string name, int iID, Color icolorID, Product resource, int fertility) : base(name)
         {
             country = World.UncolonizedLand;
             color = country.getColor().getAlmostSameColor();
             setResource(resource);
             colorID = icolorID;
             ID = iID;
-            fertileSoil = 5000;
+            fertileSoil = fertility; //System.Random.; //5000;
         }
 
         public void setUnityAPI(MeshStructure meshStructure, Dictionary<Province, MeshStructure> neighborBorders)
@@ -667,8 +667,12 @@ namespace Nashet.EconomicSimulation
         internal void setResource(Product inres)
         {
             resource = inres;
-            if (resource == Product.Stone || resource == Product.Gold || resource == Product.MetalOre || resource == Product.Coal)
+            if (resource == Product.Stone || resource == Product.Gold || resource == Product.MetalOre ||
+                resource == Product.Coal)
+            {
                 terrain = TerrainTypes.Mountains;
+                fertileSoil /= 2;
+            }
             else
                 terrain = TerrainTypes.Plains;
         }
@@ -1058,6 +1062,11 @@ namespace Nashet.EconomicSimulation
             }
         }
 
+        public int getSoilFertility()
+        {
+            return fertileSoil;
+        }
+        
         public MoneyView getGDP()
         {
             Money result = new Money(0m);
