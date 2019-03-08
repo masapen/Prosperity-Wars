@@ -14,7 +14,7 @@ namespace Nashet.EconomicSimulation
     /// <summary>
     /// Represents population unit which can live, consume, produce, invest
     /// </summary>
-    public abstract class PopUnit : Producer, IClickable, INameable
+    public abstract class PopUnit : Producer, IClickable, INameable, IArguable
     {
         ///<summary>buffer popList. To avoid iteration breaks</summary>
         public static readonly List<PopUnit> PopListToAddToGeneralList = new List<PopUnit>();
@@ -22,7 +22,14 @@ namespace Nashet.EconomicSimulation
         public static readonly Predicate<PopUnit> All = x => true;
 
         public readonly Procent loyalty;
+
+        /// <summary>
+        /// Range of 0 - 100% of anything that implements IArguable
+        /// </summary>
+
+        public readonly Dictionary<IArguable, Procent> opinions;
         public readonly Population population;
+        private float wealthFactor;
         private int mobilized;
 
         private readonly PopType type;
@@ -31,6 +38,8 @@ namespace Nashet.EconomicSimulation
         {
             get { return type; }
         }
+
+        public float WealthFactor => wealthFactor;
 
         public readonly Culture culture;
         private readonly Education education;
@@ -58,7 +67,7 @@ namespace Nashet.EconomicSimulation
             modifierMinorityPolicy, modifierSomeEverydayNeedsFulfilled;
 
 
-        private static readonly Modifier modCountryIsToBig = new Modifier(x => (x as PopUnit).Country.Provinces.Count > (x as PopUnit).Country.government.LoyaltySizeLimit, "That country is too big for good management", -0.5f, false);
+        private static readonly Modifier modCountryIsToBig = new Modifier(x => (x as PopUnit).Country.Provinces.Count > (x as PopUnit).Country.government.LoyaltySizeLimit, "That country is too big for good management", -0f, false);
 
         private readonly Date born;
         private Movement movement;
@@ -149,6 +158,8 @@ namespace Nashet.EconomicSimulation
             education = new Education(0f);
             loyalty = new Procent(0.50f);
             needsFulfilled = new Procent(0.00f);
+            opinions = new Dictionary<IArguable, Procent>();
+            wealthFactor = 0.0f;
             //province = where;
         }
 
@@ -191,6 +202,8 @@ namespace Nashet.EconomicSimulation
             this.culture = culture;
             education = new Education(source.education.get());
             needsFulfilled = new Procent(source.needsFulfilled.get());
+            wealthFactor = source.WealthFactor;
+            opinions = source.opinions;
             daysUpsetByForcedReform = 0;
             didntGetPromisedSocialBenefits = false;
             //incomeTaxPayed = newPopShare.sendProcentToNew(source.incomeTaxPayed);
@@ -930,7 +943,7 @@ namespace Nashet.EconomicSimulation
             return null;
         }
 
-        public void calcLoyalty()
+        public void calcLoyalty() //TODO: Turn into event handler
         {
             float newRes = loyalty.get() + modifiersLoyaltyChange.getModifier(this) / 100f;
             loyalty.Set(Mathf.Clamp01(newRes));
@@ -959,6 +972,10 @@ namespace Nashet.EconomicSimulation
         public override void simulate()
         {
             // it's in game.simulate
+            var home = Country;
+            float gdpRatio = (float) (Cash.Get() / home.getGDP().Get());
+            float popRatio = population.Get() / (float)home.Provinces.AllPops.Sum(y => y.population.Get());
+            wealthFactor = gdpRatio / popRatio;
         }
 
         // Not called in capitalism

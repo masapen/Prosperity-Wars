@@ -13,7 +13,7 @@ namespace Nashet.EconomicSimulation
     //{
     //    protected readonly GeneralStaff staff;
     //}
-    public class Movement : Staff, INameable
+    public class Movement : Staff, INameable, IArguable
     {
         private readonly IReformValue targetReformValue;
         private readonly AbstractReform targetReformType;

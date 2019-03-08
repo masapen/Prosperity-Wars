@@ -49,6 +49,7 @@ namespace Nashet.EconomicSimulation
         protected readonly List<Province> neighbors = new List<Province>();
         private readonly List<Country> cores = new List<Country>();
 
+        //TODO: Enable possibility for multiple resources per province.
         private Product resource;
 
         private Country country;
@@ -633,6 +634,7 @@ namespace Nashet.EconomicSimulation
 
             return new Procent(usedLand, fertileSoil);
         }
+        
 
         /// <summary> call it BEFORE opening enterprise
         /// Returns salary of a factory with lowest salary in province. If only one factory in province, then returns Country.minsalary
@@ -996,13 +998,13 @@ namespace Nashet.EconomicSimulation
                 else // immigration part
                 {
                     // reforms preferences
-                    if (pop.Type.isPoorStrata())
+                    if (pop.Type.isPoorStrata(pop))
                     {
                         lifeQuality.Add(Country.unemploymentSubsidies.LifeQualityImpact);// . ID * 2 / 100f);
                         lifeQuality.Add(Country.minimalWage.LifeQualityImpact);//.ID * 1 / 100f);
                         lifeQuality.Add(Country.taxationForRich.LifeQualityImpact);//.ID * 1 / 100f);
                     }
-                    else if (pop.Type.isRichStrata())
+                    else if (pop.Type.isRichStrata(pop))
                     {
                         if (Country.economy == Economy.LaissezFaire)
                             lifeQuality.Add(0.05f);

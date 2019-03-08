@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Nashet.Utils;
 using Nashet.ValueSpace;
 using UnityEngine;
@@ -27,7 +28,7 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// SHOULD not be zero!
         /// </summary>
-        private readonly float strenght;
+        private readonly float strength;
 
         private readonly float nameWeight;
 
@@ -150,11 +151,11 @@ namespace Nashet.EconomicSimulation
                 militaryNeeds, soldiersLifeNeeds, soldiersEveryDayNeeds, soldiersLuxuryNeeds);
         }
 
-        private PopType(string name, Storage produces, float strenght, List<Storage> militaryNeeds,
+        private PopType(string name, Storage produces, float strength, List<Storage> militaryNeeds,
             List<Storage> lifeNeeds, List<Storage> everyDayNeeds, List<Storage> luxuryNeeds) : base(name)
         {
             this.militaryNeeds = militaryNeeds;
-            this.strenght = strenght;
+            this.strength = strength;
 
             basicProduction = produces;
             this.lifeNeeds = lifeNeeds;
@@ -271,19 +272,22 @@ namespace Nashet.EconomicSimulation
             return ShortName;
         }
 
-        public bool isPoorStrata()
+        public bool isPoorStrata(PopUnit pop)
         {
-            return this == Farmers || this == Workers || this == Tribesmen || this == Soldiers;
+            return pop.WealthFactor <= pop.Country.AverageWealthFactor; //Encompass impoverished, low-mid, and middle class
+            //return this == Farmers || this == Workers || this == Tribesmen || this == Soldiers;
         }
 
-        public bool isRichStrata()
+        public bool isRichStrata(PopUnit pop)
         {
-            return this == Aristocrats || this == Capitalists || this == Artisans;
+            
+            return pop.WealthFactor > pop.Country.AverageWealthFactor; //Encompass upper-mid and rich class
+            //return this == Aristocrats || this == Capitalists || this == Artisans;
         }
 
         public float getStrenght()
         {
-            return strenght;
+            return strength;
         }
 
         public bool canBeUnemployed()

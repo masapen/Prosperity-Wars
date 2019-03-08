@@ -79,7 +79,7 @@ namespace Nashet.EconomicSimulation.Reforms
                 Procent result;
                 //positive - higher subsidies
                 int change = GetRelativeConservatism(pop.Country.UBI.typedValue);
-                if (pop.Type.isPoorStrata())
+                if (pop.Type.isPoorStrata(pop))
                 {
                     if (change > 0)
                         result = new Procent(1f);

@@ -66,6 +66,7 @@ namespace Nashet.EconomicSimulation
         }
 
         private float nameWeight;
+        private float averageWealthFactor;
 
         private TextMesh meshCapitalText;
         private Material borderMaterial;
@@ -375,6 +376,12 @@ namespace Nashet.EconomicSimulation
             return FullName;
         }
 
+        public float AverageWealthFactor
+        {
+            get => averageWealthFactor;
+
+            protected set {}
+        }
         /// <summary>
         /// Returns true if succeeded
         /// </summary>
@@ -671,12 +678,21 @@ namespace Nashet.EconomicSimulation
                     Diplomacy.ChangeRelation(item, modMyOpinionOfXCountry.getModifier(item));
                 }
 
+            //Calculate average wealth ratio
+            CalculateWealthFactor();
             Politics.Simulate();
 
             if (economy == Economy.LaissezFaire)
                 Rand.Call(() => Provinces.AllFactories.PerformAction(x => x.ownership.SetToSell(this, Procent.HundredProcent, false)), 30);
         }
 
+        private void CalculateWealthFactor()
+        {
+            float population = Provinces.AllPops.Sum(y => y.population.Get());
+                decimal gdp = getGDP().Get();
+                float GetPopClass(PopUnit p) => (float) (p.Cash.Get() / gdp) / (p.population.Get() / population);
+                averageWealthFactor = Provinces.AllPops.Average(p => GetPopClass(p));
+        }
         private void aiInvent()
         {
             var invention = Science.AllUninvented().Where(x => Science.Points >= x.Cost.get()).Random();//.ToList()

@@ -714,6 +714,7 @@ namespace Nashet.EconomicSimulation
                     // get pop's income section:
                     foreach (PopUnit pop in province.AllPops)
                     {
+                        pop.simulate();
                         if (pop.Type == PopType.Workers)
                             pop.LearnByWork();
                         if (pop.canSellProducts())

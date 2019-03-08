@@ -22,7 +22,8 @@ namespace Nashet.EconomicSimulation
 
         private static Modifier modifierInDefense = new Modifier(x => (x as Army).isInDefense(), "Is in defense", 0.5f, false);
 
-        //static Modifier modifierDefenseInMountains = new Modifier(x => (x as Army).isInDefense() && (x as Army).getDestination()!=null && (x as Army).getDestination().getTerrain() == TerrainTypes.Mountains, "Defense in mountains", 0.2f, false);
+        private static Modifier modifierDefenseInMountains = new Modifier(x => (x as Army).isInDefense() && (x as Army)?.Destination!=null && (x as Army).Destination.Terrain == Province.TerrainTypes.Mountains, "Defense in mountains", 1.0f, false);
+        private static Modifier modifierStrikeFromAbove = new Modifier(x => (x as Army)?.Destination != null && (x as Army).Province.Terrain == Province.TerrainTypes.Mountains && (x as Army).Destination.Terrain != Province.TerrainTypes.Mountains, "Attacking from high ground", 1.0f, false);
         private static Modifier modifierMorale = new Modifier(x => (x as Army).GetAverageCorps(y => y.getMorale()).get(), "Morale", 1f, true);
 
         private static Modifier modifierHorses = new Modifier(x => (x as Army).getHorsesSupply(), "Horses", 0.5f, false);
@@ -43,6 +44,15 @@ namespace Nashet.EconomicSimulation
             get { return Province.Position; }
         }
 
+        private Province _destination;
+
+        public Province Destination
+        {
+            get { return _destination; }
+            protected set { _destination = value; }
+        }
+
+        
         public Province Province { get; protected set; }
         private float getHorsesSupply()
         {
@@ -115,7 +125,7 @@ namespace Nashet.EconomicSimulation
         //modifierDefenseInMountains
             Modifier.modifierDefault1, modifierInDefense,  modifierMorale, modifierHorses, modifierColdArms,
         modifierFirearms, modifierArtillery, modifierCars, modifierTanks, modifierAirplanes, modifierLuck,
-        modifierEducation
+        modifierEducation, modifierDefenseInMountains, modifierStrikeFromAbove
         });
 
         public bool IsSelected { get; protected set; }
@@ -690,9 +700,15 @@ namespace Nashet.EconomicSimulation
         public void SetPathTo(Province destinationProvince, Predicate<Province> predicate = null)
         {
             if (destinationProvince == null)
+            {
                 Path = null;
+                Destination = null;
+            }
             else
+            {
                 Path = World.Get.graph.GetShortestPath(Province, destinationProvince, predicate);//,x => x.Country == owner || Diplomacy.IsInWar(x.Country, owner.Country) || x.Country == World.UncolonizedLand
+                Destination = destinationProvince;
+            }
             Game.provincesToRedrawArmies.Add(Province);
             //Province.RedrawLocalArmies();
         }

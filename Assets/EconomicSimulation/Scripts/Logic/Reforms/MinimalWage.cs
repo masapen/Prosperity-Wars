@@ -138,7 +138,7 @@ namespace Nashet.EconomicSimulation.Reforms
                         //result = new Procent((change + PossibleStatuses.Count - 1) * 0.1f /2f);
                         result = new Procent(0f);
                 }
-                else if (pop.Type.isPoorStrata())
+                else if (pop.Type.isPoorStrata(pop))
                     result = new Procent(0.5f);
                 else // rich strata
                 {

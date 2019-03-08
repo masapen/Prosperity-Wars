@@ -146,7 +146,7 @@ namespace Nashet.EconomicSimulation.Reforms
             {
                 Procent result;
                 //if (pop.Type == PopType.Capitalists)
-                if (pop.Type.isRichStrata())
+                if (pop.Type.isRichStrata(pop))
                 {
                     //positive - more liberal
                     int relation = GetRelativeConservatism(pop.Country.economy.typedValue); // ID - pop.Country.economy.value.ID;

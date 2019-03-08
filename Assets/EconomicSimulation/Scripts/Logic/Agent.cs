@@ -282,7 +282,7 @@ namespace Nashet.EconomicSimulation
                     // in rest cases only pops pay taxes
                     var popReceiver = incomeReceiver as PopUnit;
                     if (popReceiver != null)
-                        incomeReceiver.Country.TakeIncomeTaxFrom(popReceiver, howMuchPayReally, popReceiver.Type.isPoorStrata());
+                        incomeReceiver.Country.TakeIncomeTaxFrom(popReceiver, howMuchPayReally, popReceiver.Type.isPoorStrata(popReceiver));
                     //else // if it's not Pop than it should by dividends from enterprise..
                     //{
                     //    //var countryPayer = incomeReceiver as Country;
