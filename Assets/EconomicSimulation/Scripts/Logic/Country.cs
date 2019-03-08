@@ -65,6 +65,10 @@ namespace Nashet.EconomicSimulation
             get { return ownershipSecurity.Copy(); }
         }
 
+        private Money _nationalGDP;
+
+        public Money GDP => _nationalGDP;
+        
         private float nameWeight;
         private float averageWealthFactor;
 
@@ -112,7 +116,7 @@ namespace Nashet.EconomicSimulation
 
             economy = new Economy(this, 2);
             government = new Government(this, 3);
-
+            _nationalGDP = new Money(0m);
 
             Culture = culture;
             NationalColor = color;
@@ -650,6 +654,8 @@ namespace Nashet.EconomicSimulation
         {
             // military staff
             base.simulate();
+            
+            setGDP();
 
             ownershipSecurity.Add(Options.CountryOwnershipRiskRestoreSpeed, false);
             ownershipSecurity.clamp100();
@@ -873,12 +879,17 @@ namespace Nashet.EconomicSimulation
 
         public MoneyView getGDP()
         {
+            return GDP;
+        }
+
+        private void setGDP()
+        {
             Money result = new Money(0m);
             foreach (var province in AllProvinces)
             {
                 result.Add(province.getGDP());
             }
-            return result;
+            _nationalGDP = result;
         }
 
         public MoneyView getGDPPer1000()
