@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Nashet.EconomicSimulation.Reforms;
 using Nashet.ValueSpace;
 
 namespace Nashet.EconomicSimulation
@@ -24,7 +25,7 @@ namespace Nashet.EconomicSimulation
             changeProductionType(this.type.basicProduction.Product);
         }
 
-        //internal Agent getOwner()
+        //public Agent getOwner()
         //{
         //    return owner;
         //}
@@ -56,15 +57,15 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// could be negative
         /// </summary>        
-        internal decimal getProfit()
+        public decimal getProfit()
 
         {
             //return (float)(moneyIncomeThisTurn.Get() - getExpences().Get());
-            if (Country.economy.getValue() == Economy.PlannedEconomy)
+            if (Country.economy == Economy.PlannedEconomy)
                 return 0m;
             else
                 //return base.getProfit() - (float)getSalaryCost().Get();
-                return moneyIncomeThisTurn.Get() - getExpences().Get();
+                return Register.Balance;
         }
 
         /// <summary>
@@ -91,7 +92,7 @@ namespace Nashet.EconomicSimulation
                         getInputProductsReserve().Subtract(next, false);
         }
 
-        internal abstract Procent getInputFactor();
+        public abstract Procent getInputFactor();
 
         protected Procent getInputFactor(Procent multiplier)
         {
@@ -113,7 +114,7 @@ namespace Nashet.EconomicSimulation
             //old DSB
             //foreach (Storage input in realInput)
             //{
-            //    available = World.market.HowMuchAvailable(input);
+            //    available = Country.market.HowMuchAvailable(input);
             //    if (available.get() < input.get())
             //        input.set(available);
             //}
@@ -132,7 +133,7 @@ namespace Nashet.EconomicSimulation
             //old last turn consumption checking thing
             //foreach (Storage input in realInput)
             //{
-            //    //if (World.market.getDemandSupplyBalance(input.Product) >= 1f)
+            //    //if (Country.market.getDemandSupplyBalance(input.Product) >= 1f)
             //    //available = input
 
             //    available = consumedLastTurn.findStorage(input.Product);
@@ -209,7 +210,7 @@ namespace Nashet.EconomicSimulation
         {
             //Value multiplier = new Value(getEfficiency(false).get() * getLevel());
             if (type.isResourceGathering())
-               yield return null;
+                yield return null;
             //List<Storage> result = new List<Storage>();
 
             foreach (Storage next in type.resourceInput)
@@ -256,9 +257,9 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         ///new value
         /// </summary>
-        internal virtual MoneyView getExpences()
+        public virtual MoneyView getExpences()
         {
-            return World.market.getCost(getConsumed());
+            return Country.market.getCost(getConsumed());
         }
 
         public bool isAllInputProductsCollected()
@@ -270,6 +271,11 @@ namespace Nashet.EconomicSimulation
                     return false;
             }
             return true;
+        }
+        override protected void Buy_utility(Market market, MoneyView cost, Storage what)
+        {
+            base.Buy_utility(market, cost, what);
+            getInputProductsReserve().Add(what);
         }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using Nashet.EconomicSimulation.Reforms;
 using Nashet.Utils;
 using Nashet.ValueSpace;
 using UnityEngine;
@@ -19,14 +20,13 @@ namespace Nashet.EconomicSimulation
             return false;
         }
 
-        internal void dealWithMarket()
+        public void SentExtraGoodsToMarket()
         {
             if (storage.get() > Options.aristocratsFoodReserv)
             {
                 Storage howMuchSend = new Storage(storage.Product, storage.get() - Options.aristocratsFoodReserv);
-                storage.send(getSentToMarket(), howMuchSend);
-                //sentToMarket.set(howMuchSend);
-                World.market.sentToMarket.Add(howMuchSend);
+
+                SendToMarket(howMuchSend);                
             }
         }
 
@@ -35,15 +35,15 @@ namespace Nashet.EconomicSimulation
             //Aristocrats don't produce anything
         }
 
-        internal override bool canTrade()
+        public override bool canTrade()
         {
-            if (Country.economy.getValue() == Economy.PlannedEconomy)
+            if (Country.economy == Economy.PlannedEconomy)
                 return false;
             else
                 return true;
         }
 
-        internal override bool canSellProducts()
+        public override bool canSellProducts()
         {
             return true;
         }
@@ -53,19 +53,19 @@ namespace Nashet.EconomicSimulation
             return false;
         }
 
-        internal override bool canVote(Government.ReformValue reform)
+        public override bool CanVoteWithThatGovernment(Government.GovernmentReformValue reform)
         {
             if ((reform == Government.Democracy || reform == Government.Polis || reform == Government.WealthDemocracy
                 || reform == Government.Aristocracy || reform == Government.Tribal)
-                && (isStateCulture() || Country.minorityPolicy.getValue() == MinorityPolicy.Equality))
+                && (isStateCulture() || Country.minorityPolicy == MinorityPolicy.Equality))
                 return true;
             else
                 return false;
         }
 
-        internal override int getVotingPower(Government.ReformValue reformValue)
+        public override int getVotingPower(Government.GovernmentReformValue reformValue)
         {
-            if (canVote(reformValue))
+            if (CanVoteWithThatGovernment(reformValue))
                 if (reformValue == Government.WealthDemocracy)
                     return Options.PopRichStrataVotePower;
                 else
@@ -74,13 +74,13 @@ namespace Nashet.EconomicSimulation
                 return 0;
         }
 
-        internal override void invest()
+        public override void invest()
         {
             // Aristocrats invests only in resource factories (and banks)
             if (Province.getResource() != null)
             {
                 // if AverageFactoryWorkforceFulfilling isn't full you can get more workforce by raising salary (implement it later)
-                var projects = Province.getAllInvestmentProjects().Where(
+                var projects = Province.AllInvestmentProjects().Where(
                    //x => x.CanProduce(Province.getResource())
                    delegate (IInvestable x)
                    {                       
@@ -88,12 +88,12 @@ namespace Nashet.EconomicSimulation
                            return false;
                        var isFactory = x as Factory;
                        if (isFactory != null)
-                           return Country.InventedFactory(isFactory.Type);
+                           return Country.Science.IsInventedFactory(isFactory.Type);
                        else
                        {
                            var newFactory = x as NewFactoryProject;
                            if (newFactory != null)
-                               return Country.InventedFactory(newFactory.Type);
+                               return Country.Science.IsInventedFactory(newFactory.Type);
                            else
                            {
                                var isBuyingShare = x as Owners;
@@ -124,19 +124,19 @@ namespace Nashet.EconomicSimulation
                         // try to build for grain
                         if (storage.has(resourceToBuild))
                         {
-                            var factory = Province.BuildFactory(this, factoryProject.Type, World.market.getCost(resourceToBuild));
+                            var factory = Province.BuildFactory(this, factoryProject.Type, Country.market.getCost(resourceToBuild));
                             storage.send(factory.getInputProductsReserve(), resourceToBuild);
                             factory.constructionNeeds.setZero();
                         }
                         else // build for money
                         {
-                            MoneyView investmentCost = World.market.getCost(resourceToBuild);
+                            MoneyView investmentCost = Country.market.getCost(resourceToBuild);
                             if (!CanPay(investmentCost))
                                 Bank.GiveLackingMoneyInCredit(this, investmentCost);
                             if (CanPay(investmentCost))
                             {
                                 var factory = Province.BuildFactory(this, factoryProject.Type, investmentCost);  // build new one
-                                PayWithoutRecord(factory, investmentCost);
+                                PayWithoutRecord(factory, investmentCost, Register.Account.Construction);
                             }
                         }
                     }
@@ -145,7 +145,7 @@ namespace Nashet.EconomicSimulation
                         var factory = project as Factory;// existing one
                         if (factory != null)
                         {
-                            MoneyView investmentCost = factory.GetInvestmentCost();
+                            MoneyView investmentCost = factory.GetInvestmentCost(Country.market);
                             if (!CanPay(investmentCost))
                                 Bank.GiveLackingMoneyInCredit(this, investmentCost);
                             if (CanPay(investmentCost))

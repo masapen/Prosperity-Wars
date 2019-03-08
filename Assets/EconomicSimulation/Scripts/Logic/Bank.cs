@@ -1,6 +1,6 @@
-﻿using System;
-using Nashet.Utils;
+﻿using Nashet.Utils;
 using Nashet.ValueSpace;
+using System;
 
 namespace Nashet.EconomicSimulation
 {
@@ -16,12 +16,12 @@ namespace Nashet.EconomicSimulation
 
         public string FullName
         {
-            get { return "Bank of " + country.ShortName; }
+            get { return "Bank of " + Country.ShortName; }
         }
 
         public string ShortName
         {
-            get { return "Bank of " + country.ShortName; }
+            get { return "Bank of " + Country.ShortName; }
         }
 
         public Bank(Country country) : base(country)
@@ -34,9 +34,9 @@ namespace Nashet.EconomicSimulation
         /// Just wouldn't take money if giver hasn't enough money.
         /// Don't provide variables like Cash as argument!! It would default to zero!
         /// </summary>
-        internal void ReceiveMoney(Agent giver, MoneyView sum)
+        public void ReceiveMoney(Agent giver, MoneyView sum)
         {
-            if (giver.PayWithoutRecord(this, sum))
+            if (giver.PayWithoutRecord(this, sum, Register.Account.BankOperation))
                 if (giver.loans.isNotZero())  //has debt (meaning has no deposits)
                     if (sum.isBiggerOrEqual(giver.loans)) // cover debt
                     {
@@ -62,7 +62,7 @@ namespace Nashet.EconomicSimulation
         /// Gives whole sum or gives nothing.
         /// Checks inside. Return false if didn't give credit.
         /// </summary>
-        internal bool GiveCredit(Agent taker, MoneyView desiredCredit) // todo check
+        public bool GiveCredit(Agent taker, MoneyView desiredCredit) // todo check
         {
             if (taker.deposits.isNotZero()) // has deposit (meaning, has no loans)
             {
@@ -78,7 +78,7 @@ namespace Nashet.EconomicSimulation
                     {
                         taker.loans.Set(restOfTheSum);//important
                         givenCredits.Add(restOfTheSum);
-                        PayWithoutRecord(taker, restOfTheSum);
+                        PayWithoutRecord(taker, restOfTheSum, Register.Account.BankOperation);
                         return true;
                     }
                     else
@@ -102,7 +102,7 @@ namespace Nashet.EconomicSimulation
                 {
                     taker.loans.Add(desiredCredit);
                     givenCredits.Add(desiredCredit);
-                    PayWithoutRecord(taker, desiredCredit);
+                    PayWithoutRecord(taker, desiredCredit, Register.Account.BankOperation);
                     return true;
                 }
                 else
@@ -113,11 +113,11 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// Gives credit. Checks inside. Just wouldn't give money if can't
         /// </summary>
-        internal bool GiveLackingMoneyInCredit(Agent taker, MoneyView desirableSum)
+        public bool GiveLackingMoneyInCredit(Agent taker, MoneyView desirableSum)
         {
-            if (taker.Country.Invented(Invention.Banking))// find money in bank?
+            if (taker.Country.Science.IsInvented(Invention.Banking))// find money in bank?
             {
-                MoneyView lackOfSum = desirableSum.Copy().Subtract(taker.getMoneyAvailable(), false); 
+                MoneyView lackOfSum = desirableSum.Copy().Subtract(taker.getMoneyAvailable(), false);
                 if (lackOfSum.isNotZero())
                     return GiveCredit(taker, lackOfSum);
                 else
@@ -130,9 +130,9 @@ namespace Nashet.EconomicSimulation
         /// Result is how much deposit was really returned. Checks inside. Just wouldn't give money if can't
         /// Can return less than was prompted
         /// </summary>
-        internal MoneyView ReturnDeposit(Agent toWhom, MoneyView howMuchWants)
+        public MoneyView ReturnDeposit(Agent toWhom, MoneyView howMuchWants)
         {
-            if (toWhom.Country.Invented(Invention.Banking))// find money in bank? //todo remove checks, make bank==null if uninvented
+            if (toWhom.Country.Science.IsInvented(Invention.Banking))// find money in bank? //todo remove checks, make bank==null if uninvented
             {
                 var maxReturnLimit = HowMuchDepositCanReturn(toWhom);
                 if (maxReturnLimit.isBiggerOrEqual(howMuchWants))
@@ -147,7 +147,7 @@ namespace Nashet.EconomicSimulation
                     {
                         //giveMoney(toWhom, moneyToReturn);
                         toWhom.deposits.Subtract(returnMoney);
-                        PayWithoutRecord(toWhom, returnMoney);
+                        PayWithoutRecord(toWhom, returnMoney, Register.Account.BankOperation);
                     }
                     return returnMoney;
                 }
@@ -158,7 +158,7 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// Returns deposits only. As much as possible. checks inside. Just wouldn't give money if can't
         /// </summary>
-        internal void ReturnAllDeposits(Agent toWhom)
+        public void ReturnAllDeposits(Agent toWhom)
         {
             ReturnDeposit(toWhom, HowMuchDepositCanReturn(toWhom));
         }
@@ -166,7 +166,7 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// includes checks for Cash and deposit. Returns copy
         /// </summary>
-        internal MoneyView HowMuchDepositCanReturn(Agent agent)
+        public MoneyView HowMuchDepositCanReturn(Agent agent)
         {
             var howMuchReturn = agent.deposits.Copy();//initialization
 
@@ -181,12 +181,12 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// includes checks for Cash and deposit.
         /// </summary>
-        internal bool CanReturnDeposit(Agent agent, MoneyView howMuch)
+        public bool CanReturnDeposit(Agent agent, MoneyView howMuch)
         {
             return HowMuchDepositCanReturn(agent).isBiggerOrEqual(howMuch);
         }
 
-        internal MoneyView GetGivenCredits()
+        public MoneyView GetGivenCredits()
         {
             return givenCredits;
         }
@@ -194,7 +194,7 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// how much money have in Cash.
         /// </summary>
-        //internal ReadOnlyValue getReservs()
+        //public ReadOnlyValue getReservs()
         //{
         //    return Cash;
         //}
@@ -208,7 +208,7 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// Agent refuses to pay debt
         /// </summary>
-        internal void OnLoanerRefusesToPay(Agent agent)
+        public void OnLoanerRefusesToPay(Agent agent)
         {
             givenCredits.Subtract(agent.loans);
             agent.loans.SetZero();
@@ -217,9 +217,9 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// Assuming all clients already defaulted theirs loans
         /// </summary>
-        internal void Annex(Bank annexingBank)
+        public void Annex(Bank annexingBank)
         {
-            annexingBank.PayAllAvailableMoney(this);
+            annexingBank.PayAllAvailableMoney(this, Register.Account.Rest);
             //annexingBank.givenCredits.SendAll(this.givenCredits);
             givenCredits.Add(annexingBank.givenCredits);
             annexingBank.givenCredits.SetZero();
@@ -228,7 +228,7 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// Checks reserve limits
         /// </summary>
-        internal bool CanGiveCredit(Agent whom, MoneyView desirableSum)
+        public bool CanGiveCredit(Agent whom, MoneyView desirableSum)
         {
             return HowBigCreditCanGive(whom).isBiggerOrEqual(desirableSum);
         }
@@ -238,7 +238,7 @@ namespace Nashet.EconomicSimulation
         /// Checks reserve limits.
         /// new value
         /// </summary>
-        internal MoneyView HowBigCreditCanGive(Agent whom)
+        public MoneyView HowBigCreditCanGive(Agent whom)
         {
             MoneyView maxSum = Cash.Copy().Subtract(GetMinimalReservs(), false); // don't take in account banks deposits
             //if (whom.deposits.isBiggerThan(maxSum))
@@ -250,9 +250,9 @@ namespace Nashet.EconomicSimulation
             return maxSum;
         }
 
-        internal void destroy(Country byWhom)
+        public void destroy(Country byWhom)
         {
-            PayAllAvailableMoney(byWhom);
+            PayAllAvailableMoney(byWhom, Register.Account.Rest);
             givenCredits.SetZero();
         }
 
@@ -263,10 +263,10 @@ namespace Nashet.EconomicSimulation
 
         public void Nationalize()
         {
-            country.Bank.PayAllAvailableMoney(country);
-            country.Bank.givenCredits.SetZero();
-            country.loans.SetZero();
-            country.deposits.SetZero();
+            Country.Bank.PayAllAvailableMoney(Country, Register.Account.Rest);
+            Country.Bank.givenCredits.SetZero();
+            Country.loans.SetZero();
+            Country.deposits.SetZero();
         }
     }
 }

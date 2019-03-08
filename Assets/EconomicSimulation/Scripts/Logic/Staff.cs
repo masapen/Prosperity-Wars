@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Nashet.Utils;
 using Nashet.ValueSpace;
+using UnityEngine;
 
 namespace Nashet.EconomicSimulation
 {
@@ -11,18 +13,23 @@ namespace Nashet.EconomicSimulation
     public abstract class Staff : Consumer, IWayOfLifeChange
     {
         private List<Army> allArmies = new List<Army>();
-
+        
+        /// <summary>
+        /// how much armies created ever
+        /// </summary>
+        public int armyCount;
+        public Texture2D Flag { get; protected set; }
         //protected Country place; //todo change class
         protected Staff(Country place) : base(place)
         {
-            //this.place = place;
+            
         }
 
         /// <summary>
         /// Sum of existing armies men + unmobilized reserve
         /// </summary>
         /// <returns></returns>
-        /// //todo performance hit 7% 420 calls 1.4mb 82 ms
+        //todo performance hit 7% 420 calls 1.4mb 82 ms
         public float getStrengthExluding(Staff againstWho)
         {
             return howMuchCanMobilize(againstWho) + getAllArmiesSize();
@@ -34,15 +41,15 @@ namespace Nashet.EconomicSimulation
             {
                 item.reMobilize(this);
             }
-            //if (Game.Random.Next(20) == 1)
+            //if (Rand.random2.Next(20) == 1)
             //    ;
         }
 
         public float howMuchCanMobilize(Staff againstWho)
         {
             float result = 0f;
-            foreach (var province in country.getAllProvinces())
-                foreach (var pop in province.GetAllPopulation())
+            foreach (var province in Country.AllProvinces)
+                foreach (var pop in province.AllPops)
                     if (pop.Type.canMobilize(this))
                         result += pop.howMuchCanMobilize(this, againstWho);
             return result;
@@ -62,10 +69,9 @@ namespace Nashet.EconomicSimulation
 
         public float getAllArmiesSize()
         {
-            int size = 0;
-            var defArmy = getDefenceForces();
-            if (defArmy != null)
-                size = defArmy.getSize();
+            int size = getDefenceForces();
+            //if (defArmy != null)
+            //    size = defArmy.getSize();
             return size;
         }
 
@@ -86,33 +92,33 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// Unites all home armies in one. Assuming armies are alive, just needed to consolidate. If there is nothing to consolidate than returns empty army
         /// </summary>
-        public Army consolidateArmies()
-        {
-            Army consolidatedArmy = new Army(this);
-            if (allArmies.Count == 1)
-                return allArmies[0];
-            else
-            {
-                if (allArmies.Count > 0)
-                {
-                    foreach (Army next in allArmies)
-                        if (next.getDestination() == null)
-                        {
-                            //consolidatedArmy.setOwner(next.getOwner());
-                            consolidatedArmy.joinin(next);
-                        }
-                    //if (addConsolidatedArmyInList)
-                    allArmies.Add(consolidatedArmy);
-                    allArmies.RemoveAll(army => army.getSize() == 0);// && army != country.sendingArmy); // don't remove sending army. Its personal already transfered to Home army
-                }
-            }
-            return consolidatedArmy;
+        //public Army consolidateArmies()
+        //{
+        //    Army consolidatedArmy = new Army(this);
+        //    if (allArmies.Count == 1)
+        //        return allArmies[0];
+        //    else
+        //    {
+        //        if (allArmies.Count > 0)
+        //        {
+        //            foreach (Army next in allArmies)
+        //                if (next.getDestination() == null)
+        //                {
+        //                    //consolidatedArmy.setOwner(next.getOwner());
+        //                    consolidatedArmy.joinin(next);
+        //                }
+        //            //if (addConsolidatedArmyInList)
+        //            allArmies.Add(consolidatedArmy);
+        //            allArmies.RemoveAll(army => army.getSize() == 0);// && army != country.sendingArmy); // don't remove sending army. Its personal already transfered to Home army
+        //        }
+        //    }
+        //    return consolidatedArmy;
 
-            //source.RemoveAll(armies => armies.getDestination() == null && armies != country.homeArmy && armies != country.sendingArmy);
-            //allArmies.RemoveAll(army => army.getSize() == 0);// && army != country.sendingArmy); // don't remove sending army. Its personal already transfered to Home army
-        }
+        //    //source.RemoveAll(armies => armies.getDestination() == null && armies != country.homeArmy && armies != country.sendingArmy);
+        //    //allArmies.RemoveAll(army => army.getSize() == 0);// && army != country.sendingArmy); // don't remove sending army. Its personal already transfered to Home army
+        //}
 
-        //internal void mobilize()
+        //public void mobilize()
         //{
         //    foreach (var province in place.ownedProvinces)
         //    {
@@ -123,17 +129,19 @@ namespace Nashet.EconomicSimulation
         //    }
         //    consolidateArmies();
         //}
-        internal void mobilize(IEnumerable<Province> source)
+        public void mobilize(IEnumerable<Province> source)
         {
             foreach (var province in source)
             {
-                Army newArmy = new Army(this);
-                foreach (var pop in province.GetAllPopulation())
-                    if (pop.Type.canMobilize(this) && pop.howMuchCanMobilize(this, null) > 0)
-                        //newArmy.add(item.mobilize(this));
-                        newArmy.add(Corps.mobilize(this, pop));
+                // mirrored in Army
+                if (province.AllPops.Any(x=>x.Type.canMobilize(this) && x.howMuchCanMobilize(this, null) > 0))
+                    //if (pop.Type.canMobilize(this) && pop.howMuchCanMobilize(this, null) > 0) 
+                    {
+                        armyCount++;
+                        Army newArmy = new Army(this, province, this + "'s " + armyCount.ToString() + "th");                        
+                    }
             }
-            consolidateArmies();
+            //consolidateArmies();
         }
 
         public void addArmy(Army army)
@@ -141,25 +149,25 @@ namespace Nashet.EconomicSimulation
             allArmies.Add(army);
         }
 
-        internal void demobilize()
-        {
-            foreach (var item in allArmies)
-            {
-                item.demobilize();
-            }
-            allArmies.Clear();
-        }
+        //public void demobilize()
+        //{
+        //    foreach (var item in allArmies.ToList())
+        //    {
+        //        item.demobilize();
+        //    }
+        //    //allArmies.Clear();
+        //}
 
-        internal void demobilize(Func<Corps, bool> predicate)
+        public void demobilize(Func<Corps, bool> predicate=null)
         {
-            foreach (Army nextArmy in allArmies)
+            foreach (Army nextArmy in allArmies.ToList())
             {
                 nextArmy.demobilize(predicate);
             }
-            allArmies.RemoveAll(army => army.getSize() == 0);
+            //allArmies.RemoveAll(army => army.getSize() == 0);
         }
 
-        internal void rebelTo(Func<Corps, bool> popSelector, Movement movement)
+        public void rebelTo(Func<Corps, bool> popSelector, Movement movement)
         {
             allArmies.ForEach(x => x.rebelTo(popSelector, movement));
         }
@@ -177,9 +185,10 @@ namespace Nashet.EconomicSimulation
             return res;
         }
 
-        internal virtual void sendArmy(Province possibleTarget, Procent procent)
+        public virtual void sendAllArmies(Province possibleTarget)
         {
-            consolidateArmies().balance(procent).sendTo(possibleTarget);
+            allArmies.PerformAction(x => x.SetPathTo(possibleTarget));
+            //consolidateArmies().balance(procent).sendTo(possibleTarget);
         }
 
         public override void SetStatisticToZero()
@@ -188,52 +197,44 @@ namespace Nashet.EconomicSimulation
             allArmies.ForEach(x => x.setStatisticToZero());
         }
 
-        internal IEnumerable<Army> getAllArmies()
+        public IEnumerable<Army> AllArmies()
         {
             foreach (var army in allArmies)
                 yield return army;
         }
 
-        internal IEnumerable<Corps> getAllCorps()
+        public IEnumerable<Corps> getAllCorps()
         {
             foreach (var army in allArmies)
                 foreach (var corps in army.getCorps())
                     yield return corps;
         }
 
-        internal IEnumerable<Army> getAttackingArmies()
-        {
-            foreach (var army in allArmies)
-                if (army.getDestination() != null)
-                    if (army.getDestination().Country != army.getOwner())
-                        yield return army;
-                    else
-                        army.sendTo(null); // go home
-        }
+        //public IEnumerable<Army> getAttackingArmies()
+        //{
+        //    foreach (var army in allArmies)
+        //        if (army.getDestination() != null)
+        //            if (army.getDestination().Country != army.getOwner())
+        //                yield return army;
+        //            else
+        //                army.sendTo(null); // go home
+        //}
 
         /// <summary>
         /// returns Home army
         /// </summary>
         /// <returns></returns>
-        internal Army getDefenceForces()
+        public int getDefenceForces()
         {
-            Army a = allArmies.Find(x => x.getSize() > 0 && x.getDestination() == null);
-            if (a == null)
-                return new Army(this);
-            else
-                return a;
+            return allArmies.Sum(x => x.getSize());
+            //Army a = allArmies.Find(x => x.getSize() > 0 && x.getDestination() == null);
+            //if (a == null)
+            //    return new Army(this);
+            //else
+            //    return a;
         }
 
-        internal static IEnumerable<Staff> getAllStaffs()
-        {
-            foreach (var country in World.getAllExistingCountries())
-                if (country.isAlive() && country != World.UncolonizedLand)
-                {
-                    yield return country;
-                    foreach (var staff in country.movements)
-                        yield return staff;
-                }
-        }
+       
 
         /// <summary>
         /// Just a place holder, never intended to call. Just need it to record battle deaths
@@ -253,10 +254,21 @@ namespace Nashet.EconomicSimulation
         //    throw new NotImplementedException();
         //}
 
-        //internal Army getVirtualArmy(Procent procent)
+        //public Army getVirtualArmy(Procent procent)
         //{
         //    Army virtualArmy = consolidateArmies(false).getVirtualArmy(procent);
         //    return virtualArmy;
         //}
+        public void KillArmy(Army army)
+        {
+            army.Deselect();
+            army.Province.RemoveArmy(army);
+            allArmies.Remove(army);
+            World.DayPassed -= army.OnMoveArmy;
+            UnityEngine.Object.Destroy(army.unit.gameObject);
+            Game.provincesToRedrawArmies.Add(army.Province);
+            //Debug.Log("Killed army " + army);
+        }
+        
     }
 }

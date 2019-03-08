@@ -71,12 +71,12 @@ public class Path
         }
     }
 
-    internal Vector3[] GetVector3Nodes()
+    public Vector3[] GetVector3Nodes()
     {
         Vector3[] array = new Vector3[nodes.Count+1];
         for (int i = 0; i < nodes.Count; i++)
         {
-            array[i+1] = nodes[i].Province.getPosition();
+            array[i+1] = nodes[i].Province.Position;
             array[i + 1].z = -2f;
         }
         return array;
@@ -97,4 +97,12 @@ public class Path
             length);
     }
 
+    public void Add(Path path)
+    {
+        if (path != null)
+        {
+            nodes.AddRange(path.nodes);
+            Bake();
+        }
+    }
 }

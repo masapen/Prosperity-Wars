@@ -1,10 +1,10 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using Nashet.MarchingSquares;
+﻿using Nashet.MarchingSquares;
 using Nashet.UnityUIUtils;
 using Nashet.Utils;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
-using Random = System.Random;
 
 namespace Nashet.EconomicSimulation
 {
@@ -14,50 +14,55 @@ namespace Nashet.EconomicSimulation
     public class Game : ThreadedJob
     {
         public static bool devMode = false;
+        private static bool surrended = devMode;
         public static bool logInvestments = false;
         public static bool logMarket = false;
 
-        private static readonly bool readMapFormFile = false;
+        public static bool readMapFormFile = false;
         private static MyTexture mapTexture;
-        
 
-        public static Country Player;
-
-        public static Random Random = new Random();
+        public static Country Player { get; set; }
 
         public static Province selectedProvince;
         public static Province previoslySelectedProvince;
-        public static List<Unit> selectedUnits = new List<Unit>();
+        public static List<Province> provincesToRedrawArmies = new List<Province>();
+        public static List<Army> selectedArmies = new List<Army>();
+        public static List<Province> playerVisibleProvinces = new List<Province>();
 
+        private static MapModes mapMode;
 
-        private static int mapMode;
-        private static bool surrended = devMode;
-
-        
-
-        private static VoxelGrid grid;
+        private static VoxelGrid<AbstractProvince> grid;
         private readonly Rect mapBorders;
 
-        public Game()
+        public static bool DrawFogOfWar { get; internal set; }
+        public static bool IndustrialStart { get; internal set; }
+        public static MapModes MapMode { get; internal set; }
+
+        public Game(Texture2D mapImage)
         {
-            if (readMapFormFile)
+            DrawFogOfWar = true;
+            if (mapImage == null)
+                generateMapImage();
+            else
             {
-                Texture2D mapImage = Resources.Load("provinces", typeof(Texture2D)) as Texture2D; ///texture;
+                //Texture2D mapImage = Resources.Load("provinces", typeof(Texture2D)) as Texture2D; ///texture;
                 mapTexture = new MyTexture(mapImage);
             }
-            else
-                generateMapImage();
+
             mapBorders = new Rect(0f, 0f, mapTexture.getWidth() * Options.cellMultiplier, mapTexture.getHeight() * Options.cellMultiplier);
         }
 
         public void InitializeNonUnityData()
         {
-            World.market.initialize();
+            var m = new Market();
+            World.Create(mapTexture);
 
-            World.Create(mapTexture, !readMapFormFile);
+
+            m.Initialize(null);
+            //World.getAllExistingCountries().PerformAction(x => x.market.Initialize(x));  // should go after countries creation          
+
             //Game.updateStatus("Making grid..");
-            grid = new VoxelGrid(mapTexture.getWidth(), mapTexture.getHeight(), Options.cellMultiplier * mapTexture.getWidth(), mapTexture, World.GetAllProvinces());
-
+            grid = new VoxelGrid<AbstractProvince>(mapTexture.getWidth(), mapTexture.getHeight(), Options.cellMultiplier * mapTexture.getWidth(), mapTexture, World.AllAbstractProvinces);
 
             if (!devMode)
                 makeHelloMessage();
@@ -70,32 +75,18 @@ namespace Nashet.EconomicSimulation
         /// </summary>
         public static void setUnityAPI()
         {
-            // Assigns a material named "Assets/Resources/..." to the object.
-            //defaultCountryBorderMaterial = Resources.Load("materials/CountryBorder", typeof(Material)) as Material;
-            //defaultCountryBorderMaterial = GameObject.Find("CountryBorderMaterial").GetComponent<MeshRenderer>().material;
+            // has to be separate circle
+            World.AllProvinces.PerformAction(x => x.setUnityAPI(grid.getMesh(x), grid.getBorders()));
+            World.AllSeaProvinces.PerformAction(x => x.setUnityAPI(grid.getMesh(x), grid.getBorders()));
 
-            ////defaultProvinceBorderMaterial = Resources.Load("materials/ProvinceBorder", typeof(Material)) as Material;
-            //defaultProvinceBorderMaterial = GameObject.Find("ProvinceBorderMaterial").GetComponent<MeshRenderer>().material;
-
-            ////selectedProvinceBorderMaterial = Resources.Load("materials/SelectedProvinceBorder", typeof(Material)) as Material;
-            //selectedProvinceBorderMaterial = GameObject.Find("SelectedProvinceBorderMaterial").GetComponent<MeshRenderer>().material;
-
-            ////impassableBorder = Resources.Load("materials/ImpassableBorder", typeof(Material)) as Material;
-            //impassableBorder = GameObject.Find("ImpassableBorderMaterial").GetComponent<MeshRenderer>().material;
-
-            //r3dTextPrefab = (GameObject)Resources.Load("prefabs/3dProvinceNameText", typeof(GameObject));
-            //r3DProvinceTextPrefab = GameObject.Find("3DProvinceNameText");
-            //r3DCountryTextPrefab = GameObject.Find("3DCountryNameText");
-
-            World.GetAllProvinces().PerformAction(x => x.setUnityAPI(grid.getMesh(x), grid.getBorders()));
-            foreach (var item in World.GetAllProvinces())
+            foreach (var province in World.AllProvinces)
             {
-                var node = item.getRootGameObject().GetComponent<Node>();
-                node.Set(item, item.getAllNeighbors());
+                var node = province.GameObject.GetComponent<Node>();
+                node.Set(province, province.AllNeighbors());
                 World.Get.graph.AddNode(node);
+                province.SetBorderMaterials();
             }
 
-            World.GetAllProvinces().PerformAction(x => x.setBorderMaterials(false));
             Country.setUnityAPI();
             //seaProvinces = null;
             // todo clear resources
@@ -118,19 +109,21 @@ namespace Nashet.EconomicSimulation
             return mapBorders;
         }
 
-        internal static void GivePlayerControlOf(Country country)
+        public static void GivePlayerControlOf(Country newCountry)
         {
             //if (country != Country.NullCountry)
             {
                 surrended = false;
-                Player = country;
+                Player = newCountry;
                 MainCamera.politicsPanel.selectReform(null);
-                MainCamera.inventionsPanel.selectInvention(null);
+                //MainCamera.inventionsPanel.selectInvention(null);
+                Game.Player.events.RiseChangedCountry(new CountryEventArgs(newCountry));
 
                 // not necessary since it will change automatically on province selection
-                MainCamera.buildPanel.selectFactoryType(null);
+                //MainCamera.buildPanel.selectFactoryType(null);
 
-                MainCamera.refreshAllActive();
+                //MainCamera.refreshAllActive();
+                //UIEvents.RiseSomethingChangedInWorld(EventArgs.Empty, null);
             }
         }
 
@@ -139,21 +132,29 @@ namespace Nashet.EconomicSimulation
             surrended = true;
         }
 
-        internal static int getMapMode()
+        public enum MapModes
         {
-            return mapMode;
+            Political, Cultures, Cores, Resources, PopulationChange, PopulationDensity, Prosperity
         }
 
-        public static void redrawMapAccordingToMapMode(int newMapMode)
+        //case 0: //political mode
+        //    case 1: //culture mode
+        //    case 2: //cores mode
+        //    case 3: //resource mode
+        //    case 4: //population change mode
+        //    case 5: //population density mode
+        //    case 6: //prosperity map
+
+
+        public static void redrawMapAccordingToMapMode()
         {
-            mapMode = newMapMode;
-            foreach (var item in World.GetAllProvinces())
-                item.updateColor(item.getColorAccordingToMapMode());
+            foreach (var item in World.AllProvinces)
+                item.SetColorAccordingToMapMode();
         }
 
 
 
-        internal static bool isPlayerSurrended()
+        public static bool isPlayerSurrended()
         {
             return surrended;
         }
@@ -166,7 +167,7 @@ namespace Nashet.EconomicSimulation
             if (devMode)
             {
                 mapSize = 20000;
-                width = 150 + Random.Next(60);
+                width = 150 + Rand.Get.Next(60);
             }
             else
             {
@@ -175,7 +176,7 @@ namespace Nashet.EconomicSimulation
                 //mapSize = 30000;
                 //width = 180 + Random.Next(65);
                 mapSize = 40000;
-                width = 250 + Random.Next(40);
+                width = 250 + Rand.Get.Next(40);
             }
             // 140 is sqrt of 20000
             //int width = 30 + Random.Next(12);   // 140 is sqrt of 20000
@@ -188,8 +189,8 @@ namespace Nashet.EconomicSimulation
             Color emptySpaceColor = Color.black;//.setAlphaToZero();
             mapImage.setColor(emptySpaceColor);
 
-            int amountOfProvince = mapImage.width * mapImage.height / 140 + Random.Next(5);
-            //amountOfProvince = 400 + Game.Random.Next(100);
+            int amountOfProvince = mapImage.width * mapImage.height / 140 + Rand.Get.Next(5);
+            //amountOfProvince = 400 + Rand.random2.Next(100);
             for (int i = 0; i < amountOfProvince; i++)
                 mapImage.SetPixel(mapImage.getRandomX(), mapImage.getRandomY(), ColorExtensions.getRandomColor());
 
@@ -222,7 +223,7 @@ namespace Nashet.EconomicSimulation
 
         private static void makeHelloMessage()
         {
-            Message.NewMessage("Tutorial", "Hi, this is VERY early demo of game-like economy simulator called 'Prosperity wars'" +
+            MessageSystem.Instance.NewMessage("Tutorial", "Hi, this is VERY early demo of game-like economy simulator called 'Prosperity wars'" +
                 "\n\nCurrently there is: "
                 + "\n\tpopulation agents \\ factories \\ countries \\ national banks"
                 + "\n\tbasic trade \\ production \\ consumption \n\tbasic warfare \n\tbasic inventions"
@@ -233,7 +234,7 @@ namespace Nashet.EconomicSimulation
                 + "\n\nYou play as " + Player.FullName + " You can try to growth economy or conquer the world."
                 + "\n\nOr, You can give control to AI and watch it"
                 + "\n\nTry arrows or WASD for scrolling map and mouse wheel for scale"
-                + "\n'Enter' key to close top window, space - to pause \\ unpause"
+                + "\n'Enter' key to close top window, space - to pause \\ unpause, left alt - to add command"
                 + "\n\n\nI have now Patreon page where I post about that game development. Try red button below!"
                 + "\nAlso I would be thankful if you will share info about this project"
                 , "Ok", false);

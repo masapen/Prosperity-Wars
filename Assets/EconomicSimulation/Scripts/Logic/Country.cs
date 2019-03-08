@@ -1,49 +1,60 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using Nashet.Conditions;
+﻿using Nashet.Conditions;
+using Nashet.EconomicSimulation.Reforms;
 using Nashet.UnityUIUtils;
 using Nashet.Utils;
 using Nashet.ValueSpace;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace Nashet.EconomicSimulation
 {
-    public class Country : MultiSeller, IClickable, IShareOwner, ISortableName, INameable
+    public class Country : MultiSeller, IClickable, IShareOwner, ISortableName, INameable, IProvinceOwner, IInventor, IDiplomat
     {
-        internal readonly Government government;
-        internal readonly Economy economy;
-        internal readonly Serfdom serfdom;
-        internal readonly MinimalWage minimalWage;
-        internal readonly UnemploymentSubsidies unemploymentSubsidies;
-        internal readonly TaxationForPoor taxationForPoor;
-        internal readonly TaxationForRich taxationForRich;
+        public readonly Government government;
+        public readonly Economy economy;
+        public readonly Serfdom serfdom;
+        public readonly MinimalWage minimalWage;
+        public readonly UnemploymentSubsidies unemploymentSubsidies;
+        public readonly TaxationForPoor taxationForPoor;
+        public readonly TaxationForRich taxationForRich;
+
+        public readonly UBI UBI;
+        public readonly PovertyAid PovertyAid;
+        public readonly FamilyPlanning FamilyPlanning;
+
+        public readonly MinorityPolicy minorityPolicy;
+
+        public readonly UIEvents events;
 
         /// <summary> could be null</summary>
         private readonly Bank bank;
 
         public Bank Bank { get { return bank; } }
+        public Market market;
 
-        internal readonly MinorityPolicy minorityPolicy;
+        /// <summary>Encapsulates ability to own provinces </summary>
+        public readonly ProvinceOwner Provinces;
 
-        private readonly List<Province> ownedProvinces = new List<Province>();
+        public Science Science { get; protected set; }
+        public Diplomacy Diplomacy { get; protected set; }
+        public Politics Politics { get; protected set; }
 
-        private readonly Dictionary<Country, Procent> opinionOf = new Dictionary<Country, Procent>();
-        private readonly Dictionary<Country, Date> myLastAttackDate = new Dictionary<Country, Date>();
-        private readonly Dictionary<Invention, bool> inventions = new Dictionary<Invention, bool>();
-
-        public readonly List<AbstractReform> reforms = new List<AbstractReform>();
-        public readonly List<Movement> movements = new List<Movement>();
+        /// <summary>
+        /// Gives list of allowed IInvestable with pre-calculated Margin in Value. Doesn't check if it's invented
+        /// </summary>
+        public readonly CashedData<Dictionary<IInvestable, Procent>> allInvestmentProjects;
 
         private string name;
-        private readonly Culture culture;
-        private readonly Color nationalColor;
+        public Culture Culture { get; protected set; }
+        public Color NationalColor { get; protected set; }
         private Province capital;
-        private bool alive = true;
+        public bool IsAlive { get; protected set; } = true;
 
         private readonly Money soldiersWage = new Money(0m);
-        public readonly Value sciencePoints = new Value(0f);
-        public bool failedToPaySoldiers;
+
+        //public bool failedToPaySoldiers;
         public Money autoPutInBankLimit = new Money(2000);
 
         private readonly Procent ownershipSecurity = Procent.HundredProcent.Copy();
@@ -54,528 +65,225 @@ namespace Nashet.EconomicSimulation
             get { return ownershipSecurity.Copy(); }
         }
 
-        private readonly Money incomeTaxStaticticPoor = new Money(0m);
+        private Money _nationalGDP;
 
-        public Money IncomeTaxStaticticPoor
-        {
-            get { return incomeTaxStaticticPoor.Copy(); }
-        }
-
-        private readonly Money incomeTaxStatisticRich = new Money(0m);
-
-        public Money IncomeTaxStatisticRich
-        {
-            get { return incomeTaxStatisticRich.Copy(); }
-        }
-
-        private readonly Money incomeTaxForeigner = new Money(0m);
-
-        public Money IncomeTaxForeigner
-        {
-            get { return incomeTaxForeigner.Copy(); }
-        }
-
-        private readonly Money goldMinesIncome = new Money(0m);
-        public Money GoldMinesIncome { get { return goldMinesIncome.Copy(); } }
-
-        private readonly Money ownedFactoriesIncome = new Money(0m);
-        public Money OwnedFactoriesIncome { get { return ownedFactoriesIncome.Copy(); } }
-
-        public Money RestIncome
-        {
-            get { return moneyIncomeThisTurn.Copy().Subtract(getIncome()); }
-        }
-
-        private readonly Money unemploymentSubsidiesExpense = new Money(0m);
-        public Money UnemploymentSubsidiesExpense { get { return unemploymentSubsidiesExpense.Copy(); } }
-
-        private readonly Money soldiersWageExpense = new Money(0m);
-        public Money SoldiersWageExpense { get { return soldiersWageExpense.Copy(); } }
-
-        private readonly Money factorySubsidiesExpense = new Money(0m);
-        public Money FactorySubsidiesExpense { get { return factorySubsidiesExpense.Copy(); } }
-
-        private readonly Money storageBuyingExpense = new Money(0m);
-        public Money StorageBuyingExpense { get { return storageBuyingExpense.Copy(); } }
-
+        public Money GDP => _nationalGDP;
+        
         private float nameWeight;
+        private float averageWealthFactor;
 
         private TextMesh meshCapitalText;
         private Material borderMaterial;
 
-        private readonly Modifier modXHasMyCores;
         public readonly ModifiersList modMyOpinionOfXCountry;
-
-        public static readonly DoubleConditionsList canAttack = new DoubleConditionsList(new List<Condition>
-    {
-        new DoubleCondition((province, country)=>(province as Province).getAllNeighbors().Any(x => x.Country == country)
-        && (province as Province) .Country != country, x=>"Is neighbor province", true),
-        new DoubleCondition((province, country)=>!Government.isDemocracy.checkIfTrue(country)
-        || !Government.isDemocracy.checkIfTrue((province as Province).Country), x=>"Democracies can't attack each other", true)
-    });
-
-        public static readonly ModifiersList modSciencePoints = new ModifiersList(new List<Condition>
-        {
-        //new Modifier(Government.isTribal, 0f, false),
-        //new Modifier(Government.isTheocracy, 0f, false),
-        new Modifier(Government.isDespotism, Government.Despotism.getScienceModifier(), false),
-        new Modifier(Government.isJunta, Government.Junta.getScienceModifier(), false),
-        new Modifier(Government.isAristocracy, Government.Aristocracy.getScienceModifier(), false),
-        new Modifier(Government.isProletarianDictatorship, Government.ProletarianDictatorship.getScienceModifier(), false),
-        new Modifier(Government.isDemocracy, Government.Democracy.getScienceModifier(), false),
-        new Modifier(Government.isPolis, Government.Polis.getScienceModifier(), false),
-        new Modifier(Government.isWealthDemocracy, Government.WealthDemocracy.getScienceModifier(), false),
-        new Modifier(Government.isBourgeoisDictatorship, Government.BourgeoisDictatorship.getScienceModifier(), false),
-        new Modifier(x=>(x as Country).GetAllPopulation().GetAverageProcent(y=>y.Education).RawUIntValue, "Education", 1f / Procent.Precision, false)
-    });
+        private readonly Modifier modXHasMyCores;
 
         /// <summary>
         /// Don't call it directly, only from World.cs
         /// </summary>
         public Country(string name, Culture culture, Color color, Province capital, float money) : base(money, null)
-        {            
-            allInvestmentProjects = new CashedData<Dictionary<IInvestable, Procent>>(GetAllInvestmentProjects2);
-            SetName(name);            
-            foreach (var each in Invention.getAll())
-                inventions.Add(each, false);
-            country = this;
-            modXHasMyCores = new Modifier(x => (x as Country).hasCores(this), "You have my cores", -0.05f, false);
-            modMyOpinionOfXCountry = new ModifiersList(new List<Condition> { modXHasMyCores,
-            new Modifier(x=>(x as Country).government.getValue() != government.getValue(), "You have different form of government", -0.002f, false),
-            new Modifier (x=>(x as Country).getLastAttackDateOn(this).getYearsSince() > Options.CountryTimeToForgetBattle
-            && getLastAttackDateOn(x as Country).getYearsSince() > Options.CountryTimeToForgetBattle,"You live in peace with us", 0.005f, false),
-            new Modifier (x=>!((x as Country).getLastAttackDateOn(this).getYearsSince() > Options.CountryTimeToForgetBattle) && (x as Country).getLastAttackDateOn(this).getYearsSince() < 15,
-            "Recently attacked us", -0.06f, false), //x=>(x as Country).getLastAttackDateOn(this).getYearsSince() > 0
-            new Modifier (x=> isThreatenBy(x as Country),"We are weaker", -0.05f, false),
-            new Modifier (delegate(object x) {isThereBadboyCountry();  return isThereBadboyCountry()!= null && isThereBadboyCountry()!= x as Country  && isThereBadboyCountry()!= this; },
-                delegate  { return "There is bigger threat to the world - " + isThereBadboyCountry(); },  0.05f, false),
-            new Modifier (x=>isThereBadboyCountry() ==x,"You are very bad boy", -0.05f, false),
-            new Modifier(x=>(x as Country).government.getValue() == government.getValue() && government.getValue()==Government.ProletarianDictatorship,
-            "Comintern aka Third International", 0.2f, false)
-            });
+        {
+            events = new UIEvents(this);
+            FailedPayments.Enable();
+
+            Provinces = new ProvinceOwner(this);
+            Science = new Science(this);
+            Diplomacy = new Diplomacy(this);
+            Politics = new Politics(this);
+
+            allInvestmentProjects = new CashedData<Dictionary<IInvestable, Procent>>(Provinces.GetAllInvestmentProjects2);
+            SetName(name);
+
+            Country = this;
+            market = Market.TemporalSingleMarket; // new Market();
 
             bank = new Bank(this);
-            //staff = new GeneralStaff(this);
-            //homeArmy = new Army(this);
-            //sendingArmy = new Army(this);
-            government = new Government(this);
 
-            economy = new Economy(this);
-            serfdom = new Serfdom(this);
 
-            minimalWage = new MinimalWage(this);
-            unemploymentSubsidies = new UnemploymentSubsidies(this);
-            taxationForPoor = new TaxationForPoor(this);
-            taxationForRich = new TaxationForRich(this);
-            minorityPolicy = new MinorityPolicy(this);
-            
+            taxationForPoor = new TaxationForPoor(this, 0);
+            taxationForRich = new TaxationForRich(this, 1);
 
-            this.culture = culture;
-            nationalColor = color;
+            minimalWage = new MinimalWage(this, 4);
+            unemploymentSubsidies = new UnemploymentSubsidies(this, 8);
+
+            serfdom = new Serfdom(this, 7);
+            minorityPolicy = new MinorityPolicy(this, 5);
+
+
+            FamilyPlanning = new FamilyPlanning(this, 6);
+            UBI = new UBI(this, 10);
+            PovertyAid = new PovertyAid(this, 9);
+
+            economy = new Economy(this, 2);
+            government = new Government(this, 3);
+            _nationalGDP = new Money(0m);
+
+            Culture = culture;
+            NationalColor = color;
             this.capital = capital;
 
             if (capital != null)
             {
-                ownedProvinces.Add(capital);
-                capital.OnSecedeTo(this, false);
-                capital.setInitial(this);
+                Provinces.TakeProvince(capital, false);
+
+                capital.AddCore(this);
             }
-            //if (!Game.devMode)
-            {
-                //economy.setValue( Economy.NaturalEconomy);
-                serfdom.setValue(Serfdom.Abolished);
-                //government.setValue(Government.Tribal, false);
 
-                government.setValue(Government.Aristocracy);
-                //economy.setValue(Economy.StateCapitalism);
-                taxationForRich.setValue(TaxationForRich.PossibleStatuses[2]);
 
-                markInvented(Invention.Farming);
+            //economy.setValue( Econ.NaturalEconomy);
+            serfdom.SetValue(Serfdom.Abolished);
+            //government.setValue(Government.Tribal, false);
 
-                markInvented(Invention.Banking);
+            government.SetValue(Government.Aristocracy);
+            //economy.setValue(Econ.StateCapitalism);
+            taxationForRich.SetValue(Government.Aristocracy.defaultRichTax);
 
-                //markInvented(Invention.Universities);
-                //markInvented(Invention.Manufactures);
+            Science.Invent(Invention.Farming);
 
-                //markInvented(Invention.metal);
-                //markInvented(Invention.individualRights);
-                //markInvented(Invention.ProfessionalArmy);
-                //markInvented(Invention.Welfare);
+            Science.Invent(Invention.Banking);
 
-                //markInvented(Invention.Collectivism);
-            }
+            //markInvented(Invention.individualRights);
+            //markInvented(Invention.ProfessionalArmy);
+            //markInvented(Invention.Welfare);
+
+            //markInvented(Invention.Collectivism);
+            modXHasMyCores = new Modifier(x => (x as Country).Provinces.HasCore(this), "You have my cores", -0.05f, false);
+
+            modMyOpinionOfXCountry = new ModifiersList(new List<Condition> { modXHasMyCores,
+            new Modifier(x=>(x as Country).government != this.government, "You have different form of government", -0.002f, false),
+            new Modifier (x=>(x as Country).Diplomacy.GetLastAttackDateOn(this).getYearsSince() > Options.CountryTimeToForgetBattle
+            && Diplomacy.GetLastAttackDateOn(x as Country).getYearsSince() > Options.CountryTimeToForgetBattle,"You live in peace with us", 0.005f, false),
+            new Modifier (x=>!((x as Country).Diplomacy.GetLastAttackDateOn(this).getYearsSince() > Options.CountryTimeToForgetBattle) && (x as Country).Diplomacy.GetLastAttackDateOn(this).getYearsSince() < 15,
+            "Recently attacked us", -0.06f, false), //x=>(x as Country).getLastAttackDateOn(this).getYearsSince() > 0
+            new Modifier (x=> isThreatenBy(x as Country),"We are weaker", -0.05f, false),
+            new Modifier (delegate(object x) {World.GetBadboyCountry();  return World.GetBadboyCountry()!= null && World.GetBadboyCountry()!= x as Country  && World.GetBadboyCountry()!= this; },
+                delegate  { return "There is bigger threat to the world - " + World.GetBadboyCountry(); },  0.05f, false),
+            new Modifier (x=>World.GetBadboyCountry() ==x,"You are very bad boy", -0.05f, false),
+            new Modifier(x=>(x as Country).government == this.government && government==Government.ProletarianDictatorship,
+            "Comintern aka Third International", 0.2f, false)
+            });
         }
 
-        internal void SetName(string name)
+        public void SetName(string name)
         {
             nameWeight = name.GetWeight();
-            this.name = name;            
+            this.name = name;
         }
 
-        private void ressurect(Province province, Government.ReformValue newGovernment)
+        private void ressurect(Province capital, Government newGovernment)
         {
-            alive = true;
-            moveCapitalTo(province);
-            government.setValue(newGovernment);
+            IsAlive = true;
+            MoveCapitalTo(capital);
+            government.SetValue(newGovernment);
             setPrefix();
         }
 
-        internal void onGrantedProvince(Province province)
+        public void onGrantedProvince(Province province)
         {
             var oldCountry = province.Country;
-            changeRelation(oldCountry, 1.00f);
-            oldCountry.changeRelation(this, 1.00f);
-            if (!isAlive())
+            Diplomacy.ChangeRelation(oldCountry, 1.00f);
+            oldCountry.Diplomacy.ChangeRelation(this, 1.00f);
+            if (!IsAlive)
             {
-                ressurect(province, oldCountry.government.getTypedValue());
+                ressurect(province, oldCountry.government);
             }
             //province.secedeTo(this, false);
-            TakeProvince(province, false);
+            Provinces.TakeProvince(province, false);
         }
 
-        public void TakeProvince(Province province, bool addModifier)
+        public Province BestCapitalCandidate()
         {
-            Country oldCountry = province.Country;
-
-            province.Country.ownedProvinces.Remove(province);
-            ownedProvinces.Add(province);
-            province.OnSecedeTo(this, addModifier);
-            province.OnSecedeGraphic(this);
-
-            //kill country or move capital
-            if (oldCountry.ownedProvinces.Count == 0)
-                oldCountry.OnKillCountry(this);
-            else if (province == oldCountry.Capital)
-                oldCountry.moveCapitalTo(oldCountry.getRandomOwnedProvince());
-
-            government.onReformEnacted(province);
+            var newCapital = Provinces.AllProvinces.Where(x => x.isCoreFor(this)).MaxBy(x => x.getFamilyPopulation());
+            if (newCapital == null)
+                newCapital = Provinces.AllProvinces.Where(x => x.getMajorCulture() == this.Culture).MaxBy(x => x.getFamilyPopulation());
+            if (newCapital == null)
+                newCapital = Provinces.AllProvinces.Random();
+            return newCapital;
         }
 
-        internal void onSeparatismWon(Country oldCountry)
+        public void onSeparatismWon(Country oldCountry)
         {
-            foreach (var item in oldCountry.ownedProvinces.ToList())
+            foreach (var item in oldCountry.Provinces.AllProvinces.ToList())
                 if (item.isCoreFor(this))
                 {
-                    TakeProvince(item, false);
+                    Provinces.TakeProvince(item, false);
                     //item.secedeTo(this, false);
                 }
-            ressurect(getRandomOwnedProvince(), government.getTypedValue());
-            foreach (var item in oldCountry.getInvented()) // copying inventions
+            ressurect(BestCapitalCandidate(), government);
+            foreach (var item in oldCountry.Science.AllInvented()) // copying inventions
             {
-                markInvented(item.Key);
+                Science.Invent(item);
             }
         }
 
         public static void setUnityAPI()
         {
-            foreach (var country in World.getAllExistingCountries())
+            foreach (var country in World.AllExistingCountries())
             {
                 // can't do it before cause graphics isn't loaded
                 if (country != World.UncolonizedLand)
-                    country.moveCapitalTo(country.ownedProvinces[0]);
+                    country.MoveCapitalTo(country.AllProvinces.First());
                 //if (capital != null) // not null-country
 
-                country.borderMaterial = new Material(LinksManager.Get.defaultCountryBorderMaterial) { color = country.nationalColor.getNegative() };
+                country.borderMaterial = new Material(LinksManager.Get.defaultCountryBorderMaterial) { color = country.NationalColor.getNegative() };
                 //item.ownedProvinces[0].setBorderMaterial(Game.defaultProvinceBorderMaterial);
-                country.ownedProvinces[0].setBorderMaterials(false);
-                country.getAllProvinces().PerformAction(x => x.OnSecedeGraphic(x.Country));
+                foreach (var province in country.AllProvinces)
+                {
+                    province.SetBorderMaterials();
+                }
+                country.Provinces.AllProvinces.PerformAction(x => x.OnSecedeGraphic(x.Country));
                 country.Flag = Nashet.Flag.Generate(128, 128);
             }
-            World.UncolonizedLand.getAllProvinces().PerformAction(x => x.OnSecedeGraphic(World.UncolonizedLand));
+            World.UncolonizedLand.Provinces.AllProvinces.PerformAction(x => x.OnSecedeGraphic(World.UncolonizedLand));
         }
 
-        internal int getSize()
-        {
-            return ownedProvinces.Count;
-        }
-
-        internal static int howMuchCountriesAlive()
-        {
-            int res = 0;
-            foreach (var item in World.getAllExistingCountries())
-                res++;
-            return res;
-        }
-
-        //public IEnumerable<KeyValuePair<Invention, bool>> getAllI()
-        //{
-        //    foreach (var invention in inventions)
-        //        if (invention.Key.isAvailable(this))
-        //            yield return invention;
-        //}
-        public IEnumerable<KeyValuePair<Invention, bool>> getAllAvailableInventions()
-        {
-            foreach (var invention in inventions)
-                if (invention.Key.isAvailable(this))
-                    yield return invention;
-        }
-
-        public IEnumerable<KeyValuePair<Invention, bool>> GetAllUninvented()
-        {
-            foreach (var invention in inventions)
-                if (invention.Value == false && invention.Key.isAvailable(this))
-                    yield return invention;
-        }
-
-        public IEnumerable<KeyValuePair<Invention, bool>> getInvented()
-        {
-            foreach (var invention in inventions)
-                if (invention.Value && invention.Key.isAvailable(this))
-                    yield return invention;
-        }
-
-        public void markInvented(Invention type)
-        {
-            inventions[type] = true;
-        }
-
-        public bool Invented(Invention type)
-        {
-            bool result = false;
-            inventions.TryGetValue(type, out result);
-            return result;
-        }
-
-        public bool Invented(Product product)
-        {
-            if (product.isAbstract())
-                return true;
-            if (
-                ((product == Product.Metal || product == Product.MetalOre || product == Product.ColdArms) && !Invented(Invention.Metal))
-                || (!Invented(Invention.SteamPower) && (product == Product.Machinery))//|| product == Product.Cement))
-                || ((product == Product.Artillery || product == Product.Ammunition) && !Invented(Invention.Gunpowder))
-                || (product == Product.Firearms && !Invented(Invention.Firearms))
-                || (product == Product.Coal && !Invented(Invention.Coal))
-                //|| (product == Cattle && !country.isInvented(Invention.Domestication))
-                || (!Invented(Invention.CombustionEngine) && (product == Product.Oil || product == Product.MotorFuel || product == Product.Rubber || product == Product.Cars))
-                || (!Invented(Invention.Tanks) && product == Product.Tanks)
-                || (!Invented(Invention.Airplanes) && product == Product.Airplanes)
-                || (product == Product.Tobacco && !Invented(Invention.Tobacco))
-                || (product == Product.Electronics && !Invented(Invention.Electronics))
-                //|| (!isResource() && !country.isInvented(Invention.Manufactories))
-                || (product == Product.Education && !Invented(Invention.Universities))
-                )
-                return false;
-            else
-                return true;
-        }
-
-        public bool InventedFactory(ProductionType production)
-        {
-            //if (!Invented(production.basicProduction.Product)
-            // || production.IsResourceProcessing() && !Invented(Invention.Manufactures)
-            // || (production.basicProduction.Product == Product.Cattle && !Invented(Invention.Domestication))
-            if (!InventedArtisanship(production)
-                 || production.IsResourceProcessing() && !Invented(Invention.Manufactures)
-             )
-                return false;
-            else
-                return true;
-        }
-
-        public bool InventedArtisanship(ProductionType production)
-        {
-            if (!Invented(production.basicProduction.Product)
-             || (production.basicProduction.Product == Product.Cattle && !Invented(Invention.Domestication))
-             )
-                return false;
-            else
-                return true;
-        }
-
-        internal void setPrefix()
+        public void setPrefix()
         {
             if (meshCapitalText != null)
                 meshCapitalText.text = FullName;
         }
 
-        public List<Country> getAllCoresOnMyland()
-        {
-            var res = new List<Country>();
-            foreach (var province in ownedProvinces)
-            {
-                foreach (var core in province.getAllCores())
-                {
-                    if (!res.Contains(core))
-                        res.Add(core);
-                }
-            }
-            return res;
-        }
-
-        public List<Country> getPotentialSeparatists()
-        {
-            var res = new List<Country>();
-            foreach (var item in getAllCoresOnMyland())
-            {
-                if (!item.isAlive())
-                    res.Add(item);
-            }
-            return res;
-        }
-
-        internal void setSoldierWage(MoneyView value)
+        public void setSoldierWage(MoneyView value)
         {
             soldiersWage.Set(value);
         }
 
-        internal MoneyView getSoldierWage()
+        public MoneyView getSoldierWage()
         {
             return soldiersWage;
-        }
-
-        //public Procent GetAveragePop(Func<PopUnit, Procent> selector)
-        //{
-        //    Procent result = new Procent(0f);
-        //    int calculatedPopulation = 0;
-        //    foreach (var province in ownedProvinces)
-        //        foreach (var pop in province.allPopUnits)
-        //        {
-        //            result.AddPoportionally(calculatedPopulation, pop.population.Get(), selector(pop));
-        //            calculatedPopulation += pop.population.Get();
-        //        }
-        //    return result;
-        //}
-        //public Procent getAverageLoyalty()
-        //{
-        //    Procent result = new Procent(0f);
-        //    int calculatedPopulation = 0;
-        //    foreach (var province in ownedProvinces)
-        //        foreach (var pop in province.allPopUnits)
-        //        {
-        //            result.addPoportionally(calculatedPopulation, pop.population.Get(), pop.loyalty);
-        //            calculatedPopulation += pop.population.Get();
-        //        }
-        //    return result;
-        //}
-        //internal Procent getAverageNeedsFulfilling()
-        //{
-        //    Procent result = new Procent(0f);
-        //    int calculatedPopulation = 0;
-        //    foreach (var province in ownedProvinces)
-        //        foreach (var pop in province.allPopUnits)
-        //        {
-        //            result.addPoportionally(calculatedPopulation, pop.population.Get(), pop.needsFulfilled);
-        //            calculatedPopulation += pop.population.Get();
-        //        }
-        //    return result;
-        //}
-        /// <summary>
-        /// Little bugged - returns RANDOM badboy, not biggest
-        /// </summary>
-        /// <returns></returns>
-        private static Date DateOfIsThereBadboyCountry = new Date(Date.Never);
-
-        private static Country BadboyCountry;
-
-        public static Country isThereBadboyCountry()
-        {
-            if (!DateOfIsThereBadboyCountry.IsToday)
-            {
-                DateOfIsThereBadboyCountry.set(Date.Today);
-                float worldStrenght = 0f;
-                foreach (var item in World.getAllExistingCountries())
-                    worldStrenght += item.getStrengthExluding(null);
-                float streghtLimit = worldStrenght * Options.CountryBadBoyWorldLimit;
-                BadboyCountry = World.getAllExistingCountries().Where(x => x != World.UncolonizedLand && x.getStrengthExluding(null) >= streghtLimit).MaxBy(x => x.getStrengthExluding(null));
-            }
-            return BadboyCountry;
-        }
-
-        //todo performance hit 7% 420 calls 1.4mb 82 ms
-        private bool isThreatenBy(Country country)
-        {
-            if (country == this)
-                return false;
-            if (country.getStrengthExluding(null) > getStrengthExluding(null) * 2)
-                return true;
-            else
-                return false;
-        }
-
-        public Date getLastAttackDateOn(Country country)
-        {
-            if (myLastAttackDate.ContainsKey(country))
-                return myLastAttackDate[country];
-            else
-                return Date.Never.Copy();
-        }
-
-        private bool hasCores(Country country)
-        {
-            return ownedProvinces.Any(x => x.isCoreFor(country));
-        }
-
-        /// <summary>
-        /// Returns null if used on itself
-        /// </summary>
-        /// <param name="country"></param>
-        public Procent getRelationTo(Country country)
-        {
-            if (this == country)
-                return null;
-            Procent opinion;
-            if (opinionOf.TryGetValue(country, out opinion))
-                return opinion;
-            else
-            {
-                opinion = new Procent(0.5f);
-                opinionOf.Add(country, opinion);
-                return opinion;
-            }
-        }
-
-        /// <summary>
-        /// Changes that country opinion of another country
-        /// </summary>
-        public void changeRelation(Country another, float change)
-        {
-            var relation = getRelationTo(another);
-            relation.Add(change, false);
-            relation.clamp100();
-        }
-
-        public Culture getCulture()
-        {
-            return culture;
-        }
-
-        public bool isAlive()
-        {
-            return alive;
         }
 
         /// <summary>
         /// Also transfers enterprises to local governments
         /// </summary>
-        internal void OnKillCountry(Country byWhom)
+        public void OnKillCountry(Country byWhom)
         {
             if (meshCapitalText != null) //todo WTF!!
-                Object.Destroy(meshCapitalText.gameObject);
+                UnityEngine.Object.Destroy(meshCapitalText.gameObject);
 
             if (this != Game.Player)
             {
                 //take all money from bank
-                if (byWhom.Invented(Invention.Banking))
+                if (byWhom.Science.IsInvented(Invention.Banking))
                     byWhom.Bank.Annex(Bank); // deposits transfered in province.OnSecede()
                 else
                     Bank.destroy(byWhom);
 
                 //byWhom.storageSet.
 
-                PayAllAvailableMoney(byWhom);
+                PayAllAvailableMoney(byWhom, Register.Account.Rest);
 
                 Bank.OnLoanerRefusesToPay(this);
             }
             countryStorageSet.sendAll(byWhom.countryStorageSet);
             //foreach (var item in World.GetAllShares(this).ToList())// transfer all enterprises to local governments
-            foreach (var item in World.GetAllFactories())// transfer all enterprises to local governments
+            foreach (var item in World.AllFactories)// transfer all enterprises to local governments
                 if (item.ownership.HasOwner(this))
                     item.ownership.TransferAll(this, item.Country);
 
             if (IsHuman)
-                Message.NewMessage("Disaster!!", "It looks like we lost our last province\n\nMaybe we would rise again?", "Okay", false, capital.getPosition());
-            alive = false;
+                MessageSystem.Instance.NewMessage("Disaster!!", "It looks like we lost our last province\n\nMaybe we would rise again?", "Okay", false, capital.Position);
+            IsAlive = false;
 
             SetStatisticToZero();
         }
@@ -585,65 +293,27 @@ namespace Nashet.EconomicSimulation
             get { return capital; }
         }
 
-        internal override void sendArmy(Province target, Procent procent)
-        {
-            base.sendArmy(target, procent);
-            //myLastAttackDate.AddMy(target.Country, Game.date);
-            if (myLastAttackDate.ContainsKey(target.Country))
-                myLastAttackDate[target.Country].set(Date.Today);
-            else
-                myLastAttackDate.Add(target.Country, Date.Today.Copy());
-        }
-
-        //internal bool canAttack(Province province)
-        //{
-        //    //!province.isBelongsTo(this) &&
-        //    return province.isNeighbor(this);
-        //}
-        /// <summary>
-        /// Has duplicates!
-        /// </summary>
-        internal IEnumerable<Province> getAllNeighborProvinces()
-        {
-            //var res = Enumerable.Empty<Province>();
-            foreach (var province in ownedProvinces)
-                foreach (var neighbor in province.getAllNeighbors().Where(p => p.Country != this))
-                    yield return neighbor;
-
-            //List<Province> result = new List<Province>();
-            //foreach (var province in ownedProvinces)
-            //    result.AddRange(
-            //        province.getAllNeighbors().Where(p => p.Country != this && !result.Contains(p))
-            //        );
-            //return result;
-        }
-
         private bool isOnlyCountry()
         {
-            if (World.getAllExistingCountries().Any(x => x != this))
+            if (World.AllExistingCountries().Any(x => x != this))
                 return false;
             else
                 return true;
         }
 
-        internal Province getRandomOwnedProvince()
-        {
-            return ownedProvinces.Random();
-        }
-
-        internal void setCapitalTextMesh(Province province)
+        public void setCapitalTextMesh(Province province)
         {
             Transform txtMeshTransform = GameObject.Instantiate(LinksManager.Get.r3DCountryTextPrefab).transform;
-            txtMeshTransform.SetParent(province.getRootGameObject().transform, false);
+            txtMeshTransform.SetParent(province.GameObject.transform, false);
 
-            Vector3 capitalTextPosition = province.getPosition();
+            Vector3 capitalTextPosition = province.Position;
             capitalTextPosition.y += 2f;
             //capitalTextPosition.z -= 5f;
             txtMeshTransform.position = capitalTextPosition;
 
             meshCapitalText = txtMeshTransform.GetComponent<TextMesh>();
             meshCapitalText.text = FullName;
-           // meshCapitalText.fontSize *= 2;
+            // meshCapitalText.fontSize *= 2;
             if (this == Game.Player)
             {
                 meshCapitalText.color = Color.blue;
@@ -656,13 +326,13 @@ namespace Nashet.EconomicSimulation
             }
         }
 
-        internal void moveCapitalTo(Province newCapital)
+        public void MoveCapitalTo(Province newCapital)
         {
             if (meshCapitalText == null)
                 setCapitalTextMesh(newCapital);
             else
             {
-                Vector3 capitalTextPosition = newCapital.getPosition();
+                Vector3 capitalTextPosition = newCapital.Position;
                 capitalTextPosition.y += 2f;
                 capitalTextPosition.z -= 5f;
                 meshCapitalText.transform.position = capitalTextPosition;
@@ -670,115 +340,17 @@ namespace Nashet.EconomicSimulation
             capital = newCapital;
         }
 
-        internal Color getColor()
-        {
-            return nationalColor;
-        }
-
-        internal Procent getYesVotes(AbstractReformValue reform, ref Procent procentPopulationSayedYes)
-        {
-            // calculate how much of population wants selected reform
-            int totalPopulation = GetAllPopulation().Sum(x => x.population.Get());
-            int votingPopulation = 0;
-            int populationSayedYes = 0;
-            int votersSayedYes = 0;
-            Procent procentVotersSayedYes = new Procent(0);
-            //Procent procentPopulationSayedYes = new Procent(0f);
-            foreach (Province province in ownedProvinces)
-                foreach (PopUnit pop in province.GetAllPopulation())
-                {
-                    if (pop.canVote())
-                    {
-                        if (pop.getSayingYes(reform))
-                        {
-                            votersSayedYes += pop.population.Get();// * pop.getVotingPower();
-                            populationSayedYes += pop.population.Get();// * pop.getVotingPower();
-                        }
-                        votingPopulation += pop.population.Get();// * pop.getVotingPower();
-                    }
-                    else
-                    {
-                        if (pop.getSayingYes(reform))
-                            populationSayedYes += pop.population.Get();// * pop.getVotingPower();
-                    }
-                }
-            if (totalPopulation != 0)
-                procentPopulationSayedYes.Set((float)populationSayedYes / totalPopulation);
-            else
-                procentPopulationSayedYes.Set(0);
-
-            if (votingPopulation == 0)
-                procentVotersSayedYes.Set(0);
-            else
-                procentVotersSayedYes.Set((float)votersSayedYes / votingPopulation);
-            return procentVotersSayedYes;
-        }
-
-        internal Material getBorderMaterial()
+        public Material getBorderMaterial()
         {
             return borderMaterial;
         }
 
         /// <summary>
-        /// Not finished, don't use it
-        /// </summary>
-        /// <param name="reform"></param>
-        internal Procent getYesVotes2(AbstractReformValue reform, ref Procent procentPopulationSayedYes)
-        {
-            int totalPopulation = GetAllPopulation().Sum(x => x.population.Get());
-            int votingPopulation = 0;
-            int populationSayedYes = 0;
-            int votersSayedYes = 0;
-            Procent procentVotersSayedYes = new Procent(0f);
-            Dictionary<PopType, int> divisionPopulationResult = new Dictionary<PopType, int>();
-            Dictionary<PopType, int> divisionVotersResult = getYesVotesByType(reform, ref divisionPopulationResult);
-            foreach (KeyValuePair<PopType, int> next in divisionVotersResult)
-                votersSayedYes += next.Value;
-
-            if (totalPopulation != 0)
-                procentPopulationSayedYes.Set((float)populationSayedYes / totalPopulation);
-            else
-                procentPopulationSayedYes.Set(0);
-
-            if (votingPopulation == 0)
-                procentVotersSayedYes.Set(0);
-            else
-                procentVotersSayedYes.Set((float)votersSayedYes / votingPopulation);
-            return procentVotersSayedYes;
-        }
-
-        internal Dictionary<PopType, int> getYesVotesByType(AbstractReformValue reform, ref Dictionary<PopType, int> divisionPopulationResult)
-        {  // division by pop types
-            Dictionary<PopType, int> divisionVotersResult = new Dictionary<PopType, int>();
-            foreach (PopType type in PopType.getAllPopTypes())
-            {
-                divisionVotersResult.Add(type, 0);
-                divisionPopulationResult.Add(type, 0);
-                foreach (Province province in ownedProvinces)
-                {
-                    foreach (PopUnit pop in province.GetAllPopulation(type))
-                        if (pop.getSayingYes(reform))
-                        {
-                            divisionPopulationResult[type] += pop.population.Get();// * pop.getVotingPower();
-                            if (pop.canVote())
-                                divisionVotersResult[type] += pop.population.Get();// * pop.getVotingPower();
-                        }
-                }
-            }
-            return divisionVotersResult;
-        }
-
-        //public bool isInvented(Invention type)
-        //{
-        //    return inventions.isInvented(type);
-        //}
-
-        /// <summary>
         /// returns new value
         /// </summary>
-        internal MoneyView getMinSalary()
+        public MoneyView getMinSalary()
         {
-            var res = (minimalWage.getValue() as MinimalWage.ReformValue).getWage();
+            var res = minimalWage.WageSize.Get();
             if (res.isZero())
                 return Options.FactoryMinPossibleSallary;
             else
@@ -796,19 +368,24 @@ namespace Nashet.EconomicSimulation
             get
             {
                 if (Game.devMode && this == Game.Player)
-                    return name + " " + government.getPrefix() + " (you are)";
+                    return name + " " + government.Prefix + " (you are)";
                 else
-                    return name + " " + government.getPrefix();
+                    return name + " " + government.Prefix;
             }
         }
 
-        public Texture2D Flag { get; private set; }
 
         public override string ToString()
         {
             return FullName;
         }
 
+        public float AverageWealthFactor
+        {
+            get => averageWealthFactor;
+
+            protected set {}
+        }
         /// <summary>
         /// Returns true if succeeded
         /// </summary>
@@ -820,7 +397,7 @@ namespace Nashet.EconomicSimulation
                 var buildNeeds = countryStorageSet.hasAllOfConvertToBiggest(propositionFactory.GetBuildNeeds());
                 if (buildNeeds != null)
                 {
-                    var newFactory = province.BuildFactory(this, propositionFactory, World.market.getCost(buildNeeds));
+                    var newFactory = province.BuildFactory(this, propositionFactory, Country.market.getCost(buildNeeds));
                     consumeFromCountryStorage(buildNeeds, this);
                     return true;
                     //newFactory.constructionNeeds.setZero();
@@ -836,7 +413,7 @@ namespace Nashet.EconomicSimulation
         {
             Storage minFound = null;
             foreach (var item in selector)
-                if (Invented(item))
+                if (Science.IsInvented(item))
                 {
                     var proposition = ProductionType.whoCanProduce(item);
                     if (proposition != null)
@@ -853,20 +430,19 @@ namespace Nashet.EconomicSimulation
                 return minFound.Product;
         }
 
-        // todo should be redone as country-wise method
-        internal void invest(Province province)
+        public void invest(Province province)
         {
-            if (economy.getValue() == Economy.PlannedEconomy && Invented(Invention.Manufactures))
+            if (economy == Economy.PlannedEconomy && Science.IsInvented(Invention.Manufactures))
                 if (!province.isThereFactoriesInUpgradeMoreThan(1)//Options.maximumFactoriesInUpgradeToBuildNew)
                     && province.getUnemployedWorkers() > 0)
                 {
-                    var industrialProduct = getMostDeficitProductAllowedHere(Product.getAllSpecificProductsInvented(x => x.isIndustrial(), this), province);
+                    var industrialProduct = getMostDeficitProductAllowedHere(Product.AllNonAbstract().Where(x => x.isIndustrial() && Science.IsInvented(x)), province);
                     if (industrialProduct == null)
                     {
-                        var militaryProduct = getMostDeficitProductAllowedHere(Product.getAllSpecificProductsInvented(x => x.isMilitary(), this), province);
+                        var militaryProduct = getMostDeficitProductAllowedHere(Product.AllNonAbstract().Where(x => x.isMilitary() && Science.IsInvented(x)), province);
                         if (militaryProduct == null)
                         {
-                            var consumerProduct = getMostDeficitProductAllowedHere(Product.getAllSpecificProductsInvented(x => x.isConsumerProduct(), this), province);
+                            var consumerProduct = getMostDeficitProductAllowedHere(Product.AllNonAbstract().Where(x => x.isConsumerProduct() && Science.IsInvented(x)), province);
                             if (consumerProduct != null)
                             {
                                 //if there is no enough some consumer product - build it
@@ -919,52 +495,71 @@ namespace Nashet.EconomicSimulation
         {
             // attacking neighbors
             if (!isOnlyCountry())
-                if (Game.Random.Next(10) == 1)
+                if (Rand.Get.Next(6) == 1)
                 {
-                    var thisStrength = getStrengthExluding(null);
-                    var possibleTarget = getAllNeighborProvinces().Distinct().MinBy(x => getRelationTo(x.Country).get());
-                    if (possibleTarget != null
-                        && (getRelationTo(possibleTarget.Country).get() < 1f || Game.Random.Next(200) == 1)
-                        && thisStrength > 0
-                        && (getAverageMorale().get() > 0.5f || getAllArmiesSize() == 0)
-                        && (thisStrength > possibleTarget.Country.getStrengthExluding(null) * 0.25f
-                            || possibleTarget.Country == World.UncolonizedLand
-                            || possibleTarget.Country.isAI() && getStrengthExluding(null) > possibleTarget.Country.getStrengthExluding(null) * 0.1f)
-                        && canAttack.isAllTrue(possibleTarget, this)
-                        && (possibleTarget.Country.isAI() || Options.AIFisrtAllowedAttackOnHuman.isPassed())
-                        )
+                    if ((getAverageMorale().get() > 0.3f) || getAllArmiesSize() == 0)// because zero army has zero morale
                     {
-                        mobilize(ownedProvinces);
-                        sendArmy(possibleTarget, Procent.HundredProcent);
+                        var thisStrength = getStrengthExluding(null);
+                        if (thisStrength > 0)
+                        {
+                            var targetCountry = Provinces.AllNeighborCountries().Distinct()
+                                .Where(x => Diplomacy.GetRelationTo(x).get() < 0.9f || Rand.Get.Next(200) == 1)
+                                .MinBy(x => Diplomacy.GetRelationTo(x.Country).get());
+
+
+                            var targetPool = Provinces.AllNeighborProvinces().Distinct().Where(x => x.Country == targetCountry).ToList();
+                            var targetProvince = targetPool.Where(x => x.isCoreFor(this)).FirstOrDefault();
+                            if (targetProvince == null)
+                                targetProvince = targetPool.Where(x => x.getMajorCulture() == this.Culture).FirstOrDefault();
+                            if (targetProvince == null)
+                                targetProvince = targetPool.Random();
+
+                            if (targetProvince != null
+                            && (thisStrength > targetProvince.Country.getStrengthExluding(null) * 0.25f
+                                || targetProvince.Country == World.UncolonizedLand
+                                || targetProvince.Country.isAI() && getStrengthExluding(null) > targetProvince.Country.getStrengthExluding(null) * 0.1f)
+                            && Diplomacy.canAttack.isAllTrue(targetProvince, this)
+                            && (targetProvince.Country.isAI() || Options.AIFisrtAllowedAttackOnHuman.isPassed())
+                            )
+                            {
+                                mobilize(Provinces.AllProvinces);
+                                foreach (var army in AllArmies())
+                                {
+                                    army.SetPathTo(targetProvince, x => x.Country == this || x.Country == targetCountry);
+                                    //if (army.Path==null)
+                                }
+
+                            }
+                        }
                     }
                 }
-            if (Game.Random.Next(90) == 1)
+            if (Rand.Get.Next(90) == 1)
                 aiInvent();
             // changing salary for soldiers
-            if (economy.getValue() != Economy.PlannedEconomy)
-                if (Invented(Invention.ProfessionalArmy) && Game.Random.Next(10) == 1)
+            if (economy != Economy.PlannedEconomy)
+                if (Science.IsInvented(Invention.ProfessionalArmy) && Rand.Get.Next(10) == 1)
                 {
                     Money newWage;
-                    Money soldierAllNeedsCost = World.market.getCost(PopType.Soldiers.getAllNeedsPer1000Men()).Copy();
-                    if (failedToPaySoldiers)
+                    Money soldierAllNeedsCost = Country.market.getCost(PopType.Soldiers.getAllNeedsPer1000Men()).Copy();
+                    if (Register.Account.Wage.GetIncomeAccount(FailedPayments).isZero())//didn't failedToPaySoldiers
                     {
-                        newWage = getSoldierWage().Copy().Multiply(0.8m);
-                        //getSoldierWage().Get() - getSoldierWage().Get() * 0.2m;
-                    }
-                    else
-                    {
-                        var balance = getBalance();
+                        var balance = Register.Balance;
 
-                        if (balance > 200f)
+                        if (balance > 200m)
                             newWage = getSoldierWage().Copy().Add(soldierAllNeedsCost.Copy().Multiply(0.002m).Add(1m));
-                        else if (balance > 50f)
+                        else if (balance > 50m)
                             newWage = getSoldierWage().Copy().Add(soldierAllNeedsCost.Copy().Multiply(0.0005m).Add(0.1m));
-                        else if (balance < -800f)
+                        else if (balance < -800m)
                             newWage = new Money(0m);
-                        else if (balance < 0f)
+                        else if (balance < 0m)
                             newWage = getSoldierWage().Copy().Multiply(0.5m);
                         else
                             newWage = getSoldierWage().Copy(); // don't change wage
+                    }
+                    else
+                    {
+                        newWage = getSoldierWage().Copy().Multiply(0.8m);
+                        //getSoldierWage().Get() - getSoldierWage().Get() * 0.2m;                        
                     }
                     //newWage = newWage.Clamp(0, soldierAllNeedsCost * 2m);
                     var limit = soldierAllNeedsCost.Copy().Multiply(2m);
@@ -973,15 +568,15 @@ namespace Nashet.EconomicSimulation
                     setSoldierWage(newWage);
                 }
             // dealing with enterprises
-            if (economy.getValue() == Economy.Interventionism)
-                Rand.Call(() => getAllFactories().PerformAction(
+            if (economy == Economy.Interventionism)
+                Rand.Call(() => Provinces.AllFactories.Where(
                     x => x.ownership.HowMuchOwns(this).Copy().Subtract(x.ownership.HowMuchSelling(this))
-                    .isBiggerOrEqual(Procent._50Procent),
+                    .isBiggerOrEqual(Procent._50Procent)).PerformAction(
                     x => x.ownership.SetToSell(this, Options.PopBuyAssetsAtTime)),
                     30);
             else
             //State Capitalism invests in own country only, Interventionists don't invests in any country
-            if (economy.getValue() == Economy.StateCapitalism)
+            if (economy == Economy.StateCapitalism)
                 Rand.Call(
                     () =>
                     {
@@ -1000,12 +595,12 @@ namespace Nashet.EconomicSimulation
                             {
                                 var isFactory = x.Key as Factory;
                                 if (isFactory != null)
-                                    return InventedFactory(isFactory.Type);
+                                    return Science.IsInventedFactory(isFactory.Type);
                                 else
                                 {
                                     var newFactory = x.Key as NewFactoryProject;
                                     if (newFactory != null)
-                                        return InventedFactory(newFactory.Type);
+                                        return Science.IsInventedFactory(newFactory.Type);
                                     else
                                     {
                                         var isBuyingShare = x.Key as Owners;
@@ -1019,7 +614,7 @@ namespace Nashet.EconomicSimulation
                             ).MaxByRandom(x => x.Value.get());
                         if (!project.Equals(default(KeyValuePair<IInvestable, Procent>)) && project.Value.isBiggerThan(Options.minMarginToInvest.Copy().Multiply(Options.InvestorEmploymentSafety)))
                         {
-                            MoneyView investmentCost = project.Key.GetInvestmentCost();
+                            MoneyView investmentCost = project.Key.GetInvestmentCost(market);
                             if (!CanPay(investmentCost))
                                 Bank.GiveLackingMoneyInCredit(this, investmentCost);
                             if (CanPay(investmentCost))
@@ -1044,7 +639,7 @@ namespace Nashet.EconomicSimulation
                                         if (factoryProject != null)
                                         {
                                             Factory factory2 = factoryProject.Province.BuildFactory(this, factoryProject.Type, investmentCost);
-                                            PayWithoutRecord(factory2, investmentCost);
+                                            PayWithoutRecord(factory2, investmentCost, Register.Account.Construction);
                                         }
                                         else
                                             Debug.Log("Unknown investment type");
@@ -1055,18 +650,24 @@ namespace Nashet.EconomicSimulation
                     }, Options.CountryInvestmentRate);
         }
 
-        internal void simulate()
+        public void simulate()
         {
             // military staff
             base.simulate();
+            
+            setGDP();
 
             ownershipSecurity.Add(Options.CountryOwnershipRiskRestoreSpeed, false);
             ownershipSecurity.clamp100();
+
             // get science points
-            sciencePoints.Add(Options.defaultSciencePointMultiplier * modSciencePoints.getModifier(this));
+            if (Game.devMode)
+                Science.AddPoints(Options.defaultSciencePointMultiplier * Science.modSciencePoints.getModifier(this) * 1000);
+            else
+                Science.AddPoints(Options.defaultSciencePointMultiplier * Science.modSciencePoints.getModifier(this));
 
             // put extra money in bank
-            if (economy.getValue() != Economy.PlannedEconomy)
+            if (economy != Economy.PlannedEconomy)
                 if (autoPutInBankLimit.isNotZero())
                 {
                     var extraMoney = Cash.Copy().Subtract(autoPutInBankLimit, false);
@@ -1077,39 +678,32 @@ namespace Nashet.EconomicSimulation
 
             //todo performance - do it not every tick?
             //International opinion;
-            foreach (var item in World.getAllExistingCountries())
+            foreach (var item in World.AllExistingCountries())
                 if (item != this)
                 {
-                    changeRelation(item, modMyOpinionOfXCountry.getModifier(item));
+                    Diplomacy.ChangeRelation(item, modMyOpinionOfXCountry.getModifier(item));
                 }
-            //movements
-            movements.RemoveAll(x => x.isEmpty());
-            foreach (var item in movements.ToArray())
-                item.simulate();
-            if (economy.getValue() == Economy.LaissezFaire)
-                Rand.Call(() => getAllFactories().PerformAction(x => x.ownership.SetToSell(this, Procent.HundredProcent, false)), 30);
+
+            //Calculate average wealth ratio
+            CalculateWealthFactor();
+            Politics.Simulate();
+
+            if (economy == Economy.LaissezFaire)
+                Rand.Call(() => Provinces.AllFactories.PerformAction(x => x.ownership.SetToSell(this, Procent.HundredProcent, false)), 30);
         }
 
+        private void CalculateWealthFactor()
+        {
+            float population = Provinces.AllPops.Sum(y => y.population.Get());
+                decimal gdp = getGDP().Get();
+                float GetPopClass(PopUnit p) => (float) (p.Cash.Get() / gdp) / (p.population.Get() / population);
+                averageWealthFactor = Provinces.AllPops.Average(p => GetPopClass(p));
+        }
         private void aiInvent()
         {
-            var invention = GetAllUninvented().Where(x => sciencePoints.isBiggerOrEqual(x.Key.getCost())).Random();//.ToList()
-            if (invention.Key != null)
-                invent(invention.Key);
-        }
-
-        /// <summary>
-        /// Checks ouside
-        /// </summary>
-        /// <param name="invention"></param>
-        public void invent(Invention invention)
-        {
-            //if (sciencePoints.isBiggerOrEqual(invention.getCost()))
-            {
-                markInvented(invention);
-                sciencePoints.Subtract(invention.getCost());
-                //return true;
-            }
-            //else return false;
+            var invention = Science.AllUninvented().Where(x => Science.Points >= x.Cost.get()).Random();//.ToList()
+            if (invention != null)
+                Science.Invent(invention);
         }
 
         private void tradeNonPE(bool usePlayerTradeSettings)//, int buyProductsForXDays)
@@ -1119,7 +713,7 @@ namespace Nashet.EconomicSimulation
             //1 day trade
             //TODO add x day buying or split buying somehow
 
-            foreach (var product in Product.getAll().Where(x => !x.isAbstract()))
+            foreach (var product in Product.AllNonAbstract())
                 //if (product.isInventedBy(this) || product == Product.Cattle)
                 if (product.isTradable())
                 {
@@ -1153,7 +747,7 @@ namespace Nashet.EconomicSimulation
                     {
                         var howMuchToSell = howMuchHave.Copy().subtract(maxLimit);
                         if (howMuchToSell.isNotZero())
-                            sell(howMuchToSell);
+                            SendToMarket(howMuchToSell);
                     }
                     else
                     {
@@ -1172,7 +766,7 @@ namespace Nashet.EconomicSimulation
         {
             // planned economy buying
             //1 day buying
-            foreach (var product in Product.getAllNonAbstractTradableInPEOrder(this))
+            foreach (var product in Product.AllNonAbstractTradableInPEOrder(this))
             //if (product.isInvented(this)) // already checked
             //foreach (var currentStorage in countryStorageSet)
             {
@@ -1191,7 +785,7 @@ namespace Nashet.EconomicSimulation
             }
             // x day buying +sells
             //foreach (var currentStorage in countryStorageSet)
-            foreach (var product in Product.getAllNonAbstractTradableInPEOrder(this))
+            foreach (var product in Product.AllNonAbstractTradableInPEOrder(this))
             {
                 var takenFromStorage = new Storage(countryStorageSet.used.GetFirstSubstituteStorage(product));
                 Storage desiredMinimum;
@@ -1223,7 +817,7 @@ namespace Nashet.EconomicSimulation
                     if (toSell.isBiggerThan(Value.Zero))   // have more than desiredMaximum
                     {
                         if (toSell.isNotZero())
-                            sell(toSell);//go sell
+                            SendToMarket(toSell);//go sell
                     }
                 }
             }
@@ -1234,13 +828,13 @@ namespace Nashet.EconomicSimulation
         /// </summary>
         public override void consumeNeeds()
         {
-            foreach (var item in getAllArmies())
+            foreach (var item in AllArmies())
             {
                 item.consume();
             }
             // Should go After all Armies consumption
 
-            if (economy.getValue() == Economy.PlannedEconomy)
+            if (economy == Economy.PlannedEconomy)
                 tradeWithPE(!isAI());
             else
             {
@@ -1276,108 +870,31 @@ namespace Nashet.EconomicSimulation
 
         private void buyNeeds(Storage toBuy)
         {
-            Storage realyBougth = World.market.Sell(this, toBuy, null);
+            Storage realyBougth = Buy(toBuy, null);
             if (realyBougth.isNotZero())
             {
                 countryStorageSet.Add(realyBougth);
-                storageBuyingExpenseAdd(World.market.getCost(realyBougth));
-            }
-        }
-
-        //public Procent getUnemployment()
-        //{
-        //return GetAllPopulation().GetAverageProcent(x => x.getUnemployedProcent());
-
-        //Procent result = new Procent(0f);
-        //int calculatedBase = 0;
-        //foreach (var item in ownedProvinces)
-        //{
-        //    //int population = item.getMenPopulationEmployable();
-        //    int population = item.GetAllPopulation().Where(x => x.Type.canBeUnemployed()).Sum(x=>x.population.Get());
-        //    result.AddPoportionally(calculatedBase, population, item.getUnemployment(PopType.All));
-        //    //result.AddPoportionally(calculatedBase,(float) population, item.GetAllPopulation().Sum(x=>x.getUnemployedProcent().get()));
-        //    calculatedBase += population;
-        //}
-        //return result;
-        //}
-        //internal int getMenPopulation()
-        //{
-        //    int result = 0;
-        //    foreach (Province pr in ownedProvinces)
-        //        result += pr.getMenPopulation();
-        //    return result;
-        //}
-        internal int getFamilyPopulation()
-        {
-            //return  getMenPopulation() * Options.familySize;
-            return GetAllPopulation().Sum(x => x.population.Get()) * Options.familySize;
-        }
-
-        public int getPopulationAmountByType(PopType ipopType)
-        {
-            int result = 0;
-            foreach (Province province in ownedProvinces)
-                result += province.GetAllPopulation(ipopType).Sum(x => x.population.Get());
-            return result;
-        }
-
-        public IEnumerable<PopUnit> GetAllPopulation(PopType type)
-        {
-            foreach (var province in ownedProvinces)
-            {
-                foreach (var item in province.GetAllPopulation(type))
-                {
-                    yield return item;
-                }
-            }
-        }
-
-        public IEnumerable<PopUnit> GetAllPopulation()
-        {
-            foreach (var province in ownedProvinces)
-                foreach (var pops in province.GetAllPopulation())
-                    yield return pops;
-        }
-
-        public IEnumerable<Province> getAllProvinces()
-        {
-            foreach (var province in ownedProvinces)
-                yield return province;
-        }
-
-        public IEnumerable<Agent> getAllAgents()
-        {
-            foreach (var province in ownedProvinces)
-                foreach (var agent in province.getAllAgents())
-                    yield return agent;
-            if (Bank != null)
-                yield return Bank;
-        }
-
-        public IEnumerable<Factory> getAllFactories()
-        {
-            foreach (var province in ownedProvinces)
-            {
-                foreach (var item in province.getAllFactories())
-                {
-                    yield return item;
-                }
             }
         }
 
         public MoneyView getGDP()
         {
+            return GDP;
+        }
+
+        private void setGDP()
+        {
             Money result = new Money(0m);
-            foreach (var province in ownedProvinces)
+            foreach (var province in AllProvinces)
             {
                 result.Add(province.getGDP());
             }
-            return result;
+            _nationalGDP = result;
         }
 
-        internal MoneyView getGDPPer1000()
+        public MoneyView getGDPPer1000()
         {
-            return (getGDP().Copy()).Multiply(1000m).Divide(getFamilyPopulation(), false);
+            return (getGDP().Copy()).Multiply(1000m).Divide(Provinces.getFamilyPopulation(), false);
             // overflows
             //res.multiply(1000);
             //res.divide(getFamilyPopulation());
@@ -1418,7 +935,7 @@ namespace Nashet.EconomicSimulation
         /// </summary>
         public int getGDPRank()
         {
-            var list = World.getAllExistingCountries().OrderByDescending(x => x.getGDP().Get());
+            var list = World.AllExistingCountries().OrderByDescending(x => x.getGDP().Get());
             return list.FindIndex(x => x == this) + 1; // starts with zero;
 
             //var list = new List<KeyValuePair<Country, Value>>();
@@ -1436,7 +953,7 @@ namespace Nashet.EconomicSimulation
         public int getGDPPer1000Rank()
         {
             var list = new List<KeyValuePair<Country, float>>();
-            foreach (var item in World.getAllExistingCountries())
+            foreach (var item in World.AllExistingCountries())
             {
                 list.Add(new KeyValuePair<Country, float>(item, (float)item.getGDPPer1000().Get()));
             }
@@ -1447,7 +964,7 @@ namespace Nashet.EconomicSimulation
         public Procent getGDPShare()
         {
             Money worldGDP = new Money(0m);
-            foreach (var item in World.getAllExistingCountries())
+            foreach (var item in World.AllExistingCountries())
             {
                 worldGDP.Add(item.getGDP());
             }
@@ -1460,9 +977,9 @@ namespace Nashet.EconomicSimulation
         public int getPopulationRank()
         {
             var list = new List<KeyValuePair<Country, int>>();
-            foreach (var item in World.getAllExistingCountries())
+            foreach (var country in World.AllExistingCountries())
             {
-                list.Add(new KeyValuePair<Country, int>(item, item.getFamilyPopulation()));
+                list.Add(new KeyValuePair<Country, int>(country, country.Provinces.getFamilyPopulation()));
             }
             list.Sort(IntOrder);
             return list.FindIndex(x => x.Key == this) + 1; // starts with zero
@@ -1474,9 +991,9 @@ namespace Nashet.EconomicSimulation
         public int getSizeRank()
         {
             var list = new List<KeyValuePair<Country, int>>();
-            foreach (var item in World.getAllExistingCountries())
+            foreach (var country in World.AllExistingCountries())
             {
-                list.Add(new KeyValuePair<Country, int>(item, item.getSize()));
+                list.Add(new KeyValuePair<Country, int>(country, country.Provinces.Count));
             }
             list.Sort(IntOrder);
             return list.FindIndex(x => x.Key == this) + 1; // starts with zero
@@ -1485,55 +1002,20 @@ namespace Nashet.EconomicSimulation
         public override void SetStatisticToZero()
         {
             base.SetStatisticToZero();
-            incomeTaxForeigner.SetZero();
-            countryStorageSet.SetStatisticToZero();
-            failedToPaySoldiers = false;
-            incomeTaxStaticticPoor.SetZero();
-            incomeTaxStatisticRich.SetZero();
-            goldMinesIncome.SetZero();
-            unemploymentSubsidiesExpense.SetZero();
-            ownedFactoriesIncome.SetZero();
-            factorySubsidiesExpense.SetZero();
-            storageBuyingExpense.SetZero();
-            soldiersWageExpense.SetZero();
+            countryStorageSet.SetStatisticToZero();            
+            Politics.SetStatisticToZero();
         }
 
-        internal float getBalance()
-        {
-            return (float)(moneyIncomeThisTurn.Get() - getExpenses().Get());
-        }
 
-        internal MoneyView getExpenses()
-        {
-            Money result = MoneyView.Zero.Copy();
-            result.Add(unemploymentSubsidiesExpense);
-            result.Add(factorySubsidiesExpense);
-            result.Add(storageBuyingExpense);
-            result.Add(soldiersWageExpense);
-            return result;
-        }
-
-        internal Money getIncome()
-        {
-            Money result = new Money(0m);
-            result.Add(incomeTaxStaticticPoor);
-            result.Add(incomeTaxStatisticRich);
-            result.Add(incomeTaxForeigner);
-            result.Add(goldMinesIncome);
-            result.Add(ownedFactoriesIncome);
-            result.Add(getCostOfAllSellsByGovernment());
-            return result;
-        }
 
         /// <summary>
         /// Returns true if was able to give a subsidy
         /// </summary>
-        internal bool GiveFactorySubsidies(Consumer byWhom, MoneyView howMuch)
+        public bool GiveFactorySubsidies(Consumer byWhom, MoneyView howMuch)
         {
             if (CanPay(howMuch))
             {
-                PayWithoutRecord(byWhom, howMuch);
-                factorySubsidiesExpense.Add(howMuch);
+                PayWithoutRecord(byWhom, howMuch, Register.Account.EnterpriseSubsidies);
                 return true;
             }
             else
@@ -1545,71 +1027,57 @@ namespace Nashet.EconomicSimulation
             //}
         }
 
-        internal void soldiersWageExpenseAdd(MoneyView payCheck)
-        {
-            soldiersWageExpense.Add(payCheck);
-        }
-
-        //internal float getPoorTaxIncome()
-        //{
-        //    return poorTaxIncome.get();
-        //}
-
-        //internal float getRichTaxIncome()
-        //{
-        //    return richTaxIncome.get();
-        //}
-
         /// <summary>
         /// Forces payer to pay tax from taxable. Returns how much payed (new value)
         /// Don't call it manually, it called from Agent.Pay() automatically
         /// </summary>
-        internal MoneyView TakeIncomeTaxFrom(Agent taxPayer, MoneyView taxable, bool isPoorStrata)
+        public MoneyView TakeIncomeTaxFrom(Agent taxPayer, MoneyView taxable, bool isPoorStrata)
         {
             var pop = taxPayer as PopUnit;
             if (pop != null
                 && pop.Type == PopType.Aristocrats
                 //&& Serfdom.IsNotAbolishedInAnyWay.checkIfTrue(Country))
-                && government.getTypedValue() == Government.Aristocracy)
+                && government == Government.Aristocracy)
                 return MoneyView.Zero; // don't pay with monarchy
             Procent tax;
-            Money statistics;
+            Register.Account account;
             if (isPoorStrata)
             {
-                tax = taxationForPoor.getTypedValue().tax;
-                statistics = incomeTaxStaticticPoor;
+                tax = taxationForPoor.tax.Procent;
+                account = Register.Account.PoorIncomeTax;
             }
             else //if (type is TaxationForRich)
             {
-                tax = taxationForRich.getTypedValue().tax;
-                statistics = incomeTaxStatisticRich;
+                tax = taxationForRich.tax.Procent;
+                account = Register.Account.RichIncomeTax;
             }
             if (!(taxPayer is Market) && taxPayer.Country != this) //foreigner
-                statistics = incomeTaxForeigner;
+            {
+                account = Register.Account.ForeignIncomeTax;
+            }
 
+            // paying tax
             var taxSize = taxable.Copy().Multiply(tax);
             if (taxPayer.CanPay(taxSize))
             {
-                taxPayer.incomeTaxPayed.Add(taxSize);
-                statistics.Add(taxSize);
-                moneyIncomeThisTurn.Add(taxSize);
-                taxPayer.PayWithoutRecord(this, taxSize);
+                taxPayer.Pay(this, taxSize, account);
+
                 return taxSize;
             }
             else
             {
                 var hadMoney = taxPayer.getMoneyAvailable().Copy();
-                taxPayer.incomeTaxPayed.Add(taxPayer.getMoneyAvailable());
-                statistics.Add(taxPayer.getMoneyAvailable());
-                moneyIncomeThisTurn.Add(taxPayer.getMoneyAvailable());
-                taxPayer.PayAllAvailableMoneyWithoutRecord(this);
+                //var availableMoney = taxPayer.getMoneyAvailable();             
+
+                taxPayer.PayAllAvailableMoney(this, account);
+
                 return hadMoney;
             }
         }
 
-        public bool TakeNaturalTax(PopUnit pop, Procent tax)
+        public bool TakeNaturalTax(PopUnit pop, ProcentReform.ProcentReformValue tax)
         {
-            var howMuchSend = pop.getGainGoodsThisTurn().Multiply(tax);
+            var howMuchSend = pop.getGainGoodsThisTurn().Multiply(tax.Procent);
 
             if (pop.storage.isBiggerOrEqual(howMuchSend))
             {
@@ -1623,95 +1091,38 @@ namespace Nashet.EconomicSimulation
             }
         }
 
-        internal void goldMinesIncomeAdd(MoneyView toAdd)
-        {
-            goldMinesIncome.Add(toAdd);
-        }
-
-        internal void unemploymentSubsidiesExpenseAdd(MoneyView toAdd)
-        {
-            unemploymentSubsidiesExpense.Add(toAdd);
-        }
-
-        internal void storageBuyingExpenseAdd(MoneyView toAdd)
-        {
-            storageBuyingExpense.Add(toAdd);
-        }
-
-        internal void ownedFactoriesIncomeAdd(MoneyView toAdd)
-        {
-            ownedFactoriesIncome.Add(toAdd);
-        }
-
-        //override public Country Country
-        //{
-        //    get { return this; }
-        //}
-        /// <summary>
-        /// Gets reform which can take given value
-        /// </summary>
-        internal AbstractReform getReform(AbstractReformValue abstractReformValue)
-        {
-            foreach (var item in reforms)
-            {
-                if (item.canHaveValue(abstractReformValue))
-                    return item;
-            }
-            return null;
-        }
-
         public void OnClicked()
         {
-            if (MainCamera.diplomacyPanel.isActiveAndEnabled)
+            Game.Player.events.RiseClickedOn(new CountryEventArgs(this));
+            //if (MainCamera.diplomacyPanel.isActiveAndEnabled)
+            //{
+            //    if (MainCamera.diplomacyPanel.getSelectedCountry() == this)
+            //        MainCamera.diplomacyPanel.Hide();
+            //    else
+            //        MainCamera.diplomacyPanel.show(this);
+            //}
+            //else
+            //    MainCamera.diplomacyPanel.show(this);
+        }
+
+        public float NameWeight
+        {
+            get
             {
-                if (MainCamera.diplomacyPanel.getSelectedCountry() == this)
-                    MainCamera.diplomacyPanel.Hide();
-                else
-                    MainCamera.diplomacyPanel.show(this);
+                return nameWeight;
             }
-            else
-                MainCamera.diplomacyPanel.show(this);
         }
 
-        public float GetNameWeight()
+        public void annexTo(Country country)
         {
-            return nameWeight;
-        }
-
-        //private readonly Properties stock = new Properties();
-        //public Properties GetOwnership()
-        //{
-        //    return stock;
-        //}
-        internal void annexTo(Country country)
-        {
-            foreach (var item in ownedProvinces.ToList())
+            foreach (var item in Provinces.AllProvinces.ToList())
             {
-                country.TakeProvince(item, false);
+                country.Provinces.TakeProvince(item, false);
                 //item.secedeTo(country, false);
             }
         }
 
-        /// <summary>
-        /// Gives list of allowed IInvestable with pre-calculated Margin in Value. Doesn't check if it's invented
-        /// </summary>
-        public readonly CashedData<Dictionary<IInvestable, Procent>> allInvestmentProjects;
-
-        private Dictionary<IInvestable, Procent> GetAllInvestmentProjects2()
-        {
-            return GetAllInvestmentProjects().ToDictionary(y => y, x => x.GetMargin());
-        }
-
-        private IEnumerable<IInvestable> GetAllInvestmentProjects()//Agent investor
-        {
-            foreach (var province in ownedProvinces)
-                foreach (var item in province.getAllInvestmentProjects())//investor
-                {
-                    yield return item;
-                }
-        }
-
-        internal void Nationilize(Factory factory)
+        public void Nationilize(Factory factory)
         {
             foreach (var owner in factory.ownership.GetAll().ToList())
                 if (owner.Key != this)
@@ -1725,19 +1136,29 @@ namespace Nashet.EconomicSimulation
                     {
                         var countryOwner = owner.Key as Country;
                         if (countryOwner != null)
-                            countryOwner.changeRelation(this, Options.PopLoyaltyDropOnNationalization.get());
+                            countryOwner.Diplomacy.ChangeRelation(this, Options.PopLoyaltyDropOnNationalization.get());
                     }
                 }
         }
 
-        /// <summary>
-        /// Returns last escape type - demotion, migration or immigration
-        /// </summary>
-        public IEnumerable<KeyValuePair<IWayOfLifeChange, int>> getAllPopulationChanges()
+        public IEnumerable<Province> AllProvinces
         {
-            foreach (var item in GetAllPopulation())
-                foreach (var record in item.getAllPopulationChanges())
-                    yield return record;
+            get
+            {
+                foreach (var province in Provinces.AllProvinces)
+                    yield return province;
+            }
+        }
+
+        //todo performance hit 7% 420 calls 1.4mb 82 ms
+        private bool isThreatenBy(Staff country)
+        {
+            if (country == this)
+                return false;
+            if (country.getStrengthExluding(null) > getStrengthExluding(null) * 2)
+                return true;
+            else
+                return false;
         }
     }
 }

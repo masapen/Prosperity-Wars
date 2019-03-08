@@ -1,27 +1,29 @@
-﻿using System.Text;
+﻿using Nashet.EconomicSimulation;
 using Nashet.UnityUIUtils;
+using System;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Nashet.EconomicSimulation
+namespace Nashet.UISystem
 {
-    public class InventionsPanel : DragPanel
+    internal class InventionsPanel : DragPanel
     {
         [SerializeField]
-        private InventionsPanelTable table;
+        protected InventionsPanelTable table;
 
         [SerializeField]
-        private Text descriptionText;
+        protected Text descriptionText;
 
         [SerializeField]
-        private Button inventButton;
+        protected Button inventButton;
 
-        private Invention selectedInvention;
+        protected Invention selectedInvention;
 
         // Use this for initialization
         private void Start()
         {
-            MainCamera.inventionsPanel = this;
+            //MainCamera.inventionsPanel = this;
             inventButton.interactable = false;
             GetComponent<RectTransform>().position = new Vector2(0f, -458f + Screen.height);
             Hide();
@@ -29,9 +31,9 @@ namespace Nashet.EconomicSimulation
 
         public void onInventClick()
         {
-            if (!Game.Player.Invented(selectedInvention) && Game.Player.sciencePoints.isBiggerOrEqual(selectedInvention.getCost()))
+            if (!Game.Player.Science.IsInvented(selectedInvention) && Game.Player.Science.Points >= selectedInvention.Cost.get())
             {
-                Game.Player.invent(selectedInvention);
+                Game.Player.Science.Invent(selectedInvention);
                 inventButton.interactable = false;
                 MainCamera.topPanel.Refresh();
                 if (MainCamera.buildPanel.isActiveAndEnabled) MainCamera.buildPanel.Refresh();
@@ -41,9 +43,24 @@ namespace Nashet.EconomicSimulation
             }
         }
 
-        public void selectInvention(Invention newSelection)
+        protected void OnClickedOn(object sender, EventArgs e)
         {
-            selectedInvention = newSelection;
+            var isInventionArgs = e as InventionEventArgs;
+            if (isInventionArgs != null)
+            {
+                if (isInventionArgs.Invention == null)
+                {
+                    if (Instance.isActiveAndEnabled)
+                        Instance.Hide();
+                    else
+                        Instance.Show();
+                }
+                else
+                {
+                    Instance.selectedInvention = isInventionArgs.Invention;
+                    Instance.Show();
+                }
+            }
         }
 
         public override void Refresh()
@@ -51,8 +68,8 @@ namespace Nashet.EconomicSimulation
             table.Refresh();
             var sb = new StringBuilder();
             string scienceModifier;
-            var spModifier = Country.modSciencePoints.getModifier(Game.Player, out scienceModifier);
-            sb.Append("Science points: ").Append(Game.Player.sciencePoints);//.Append(" + ");
+            var spModifier = Science.modSciencePoints.getModifier(Game.Player, out scienceModifier);
+            sb.Append("Science points: ").Append(Game.Player.Science.Points.ToString("F0"));//.Append(" + ");
             //sb.Append(Options.defaultSciencePointMultiplier * spModifier).Append(" Modifiers: ").Append(Options.defaultSciencePointMultiplier * scienceModifier);
             if (selectedInvention == null)
             {
@@ -65,7 +82,7 @@ namespace Nashet.EconomicSimulation
                 sb.Append("\n\n").Append(selectedInvention).Append(" : ").Append(selectedInvention.FullName);
 
                 // invention available
-                if (!Game.Player.Invented(selectedInvention) && Game.Player.sciencePoints.get() >= selectedInvention.getCost().get())
+                if (!Game.Player.Science.IsInvented(selectedInvention) && Game.Player.Science.Points >= selectedInvention.Cost.get())
                 {
                     inventButton.GetComponentInChildren<Text>().text = "Invent " + selectedInvention;
                     inventButton.interactable = true;
@@ -73,13 +90,22 @@ namespace Nashet.EconomicSimulation
                 else
                 {
                     inventButton.interactable = false;
-                    if (Game.Player.Invented(selectedInvention))
+                    if (Game.Player.Science.IsInvented(selectedInvention))
                         inventButton.GetComponentInChildren<Text>().text = "Already invented " + selectedInvention;
                     else
                         inventButton.GetComponentInChildren<Text>().text = "Not enough Science points to invent " + selectedInvention;
                 }
             }
             descriptionText.text = sb.ToString();
+        }
+
+        //todo Instance
+        protected static InventionsPanel Instance;
+        protected new void Awake()
+        {
+            base.Awake();
+            Instance = this;
+            UIEvents.ClickedOn += OnClickedOn;
         }
     }
 }

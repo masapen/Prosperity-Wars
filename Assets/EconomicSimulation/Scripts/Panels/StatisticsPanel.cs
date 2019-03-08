@@ -5,17 +5,16 @@ namespace Nashet.EconomicSimulation
 {
     public class StatisticsPanel : DragPanel
     {
-        [SerializeField]
-        private StatisticsPanelTable table;
+        [SerializeField] protected StatisticsPanelTable table;        
 
         // Use this for initialization
-        private void Start()
+        protected  void Start()
         {
             MainCamera.StatisticPanel = this;
-            GetComponent<RectTransform>().anchoredPosition = new Vector2(20f, -460f);
-            //show(false);
-            Canvas.ForceUpdateCanvases();
-            Hide();
+            GetComponent<RectTransform>().anchoredPosition = new Vector2(20f, -460f);            
+           
+            Canvas.ForceUpdateCanvases();            
+            base.Hide();
         }
 
         public override void Refresh()

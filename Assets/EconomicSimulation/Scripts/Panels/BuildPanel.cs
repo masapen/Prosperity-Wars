@@ -1,5 +1,7 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Text;
+using Nashet.EconomicSimulation.Reforms;
 using Nashet.UnityUIUtils;
 using Nashet.Utils;
 using Nashet.ValueSpace;
@@ -44,15 +46,15 @@ namespace Nashet.EconomicSimulation
             Factory factory;
             if (Economy.isMarket.checkIfTrue(Game.Player))
             {
-                MoneyView cost = selectedFactoryType.GetBuildCost();
+                MoneyView cost = selectedFactoryType.GetBuildCost(Game.Player.market);
                 if (Game.Player.CanPay(cost))
                 {
                     factory = Game.selectedProvince.BuildFactory(Game.Player, selectedFactoryType, cost);
-                    Game.Player.PayWithoutRecord(factory, cost);
+                    Game.Player.PayWithoutRecord(factory, cost, Register.Account.Construction);
                     buildSomething = true;
                     MainCamera.factoryPanel.show(factory);
                     if (Game.Player != factory.Country)
-                        factory.Country.changeRelation(Game.Player, Options.RelationImpactOnGovernmentInvestment.get());
+                        factory.Country.Diplomacy.ChangeRelation(Game.Player, Options.RelationImpactOnGovernmentInvestment.get());
                 }
             }
             else // non market
@@ -62,19 +64,20 @@ namespace Nashet.EconomicSimulation
                 Storage needFood = resourceToBuild.GetFirstSubstituteStorage(Product.Grain);
                 if (Game.Player.countryStorageSet.has(needFood))
                 {
-                    factory = Game.selectedProvince.BuildFactory(Game.Player, selectedFactoryType, World.market.getCost(resourceToBuild));
+                    factory = Game.selectedProvince.BuildFactory(Game.Player, selectedFactoryType, Game.Player.market.getCost(resourceToBuild));
                     Game.Player.countryStorageSet.Subtract(needFood);
                     buildSomething = true;
                     MainCamera.factoryPanel.show(factory);
                     if (Game.Player != factory.Country)
-                        factory.Country.changeRelation(Game.Player, Options.RelationImpactOnGovernmentInvestment.get());
+                        factory.Country.Diplomacy.ChangeRelation(Game.Player, Options.RelationImpactOnGovernmentInvestment.get());
                 }
             }
 
             if (buildSomething)
             {
                 selectedFactoryType = null;
-                MainCamera.refreshAllActive();
+                UIEvents.RiseSomethingVisibleToPlayerChangedInWorld(EventArgs.Empty, this);
+                //MainCamera.refreshAllActive();
             }
         }
 
@@ -93,11 +96,11 @@ namespace Nashet.EconomicSimulation
             {
                 sb.Clear();
                 sb.Append("Build ").Append(selectedFactoryType);
-                sb.Append("\n\nResources to build: ").Append(selectedFactoryType.GetBuildNeeds().getString(", "));
+                sb.Append("\n\nResources to build: ").Append(selectedFactoryType.GetBuildNeeds().ToString(", "));
                 sb.Append(".");
-                if (Game.Player.economy.getValue() != Economy.PlannedEconomy)
+                if (Game.Player.economy != Economy.PlannedEconomy)
                 {
-                    var cost = selectedFactoryType.GetBuildCost();
+                    var cost = selectedFactoryType.GetBuildCost(Game.Player.market);
                     sb.Append(" cost: ").Append(cost);
                 }
                 sb.Append("\nEveryday resource input: ");

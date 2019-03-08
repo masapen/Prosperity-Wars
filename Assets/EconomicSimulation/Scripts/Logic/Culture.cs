@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Nashet.EconomicSimulation
 {
-    public class Culture : Name, IWayOfLifeChange
+    public class Culture : Name, IWayOfLifeChange, IArguable
     {
         private readonly Color color;
 
@@ -19,7 +19,7 @@ namespace Nashet.EconomicSimulation
             return ShortName;
         }
 
-        internal Color getColor()
+        public Color getColor()
         {
             return color;
         }

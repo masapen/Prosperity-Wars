@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Nashet.Utils;
 using Nashet.ValueSpace;
 using UnityEngine;
@@ -27,7 +28,7 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// SHOULD not be zero!
         /// </summary>
-        private readonly float strenght;
+        private readonly float strength;
 
         private readonly float nameWeight;
 
@@ -150,11 +151,11 @@ namespace Nashet.EconomicSimulation
                 militaryNeeds, soldiersLifeNeeds, soldiersEveryDayNeeds, soldiersLuxuryNeeds);
         }
 
-        private PopType(string name, Storage produces, float strenght, List<Storage> militaryNeeds,
+        private PopType(string name, Storage produces, float strength, List<Storage> militaryNeeds,
             List<Storage> lifeNeeds, List<Storage> everyDayNeeds, List<Storage> luxuryNeeds) : base(name)
         {
             this.militaryNeeds = militaryNeeds;
-            this.strenght = strenght;
+            this.strength = strength;
 
             basicProduction = produces;
             this.lifeNeeds = lifeNeeds;
@@ -197,7 +198,7 @@ namespace Nashet.EconomicSimulation
             //return militaryNeeds;
             var result = new List<Storage>();
             foreach (var item in militaryNeeds)
-                if (item.Product != Product.Cattle || country.Invented(Invention.Domestication))
+                if (item.Product != Product.Cattle || country.Science.IsInvented(Invention.Domestication))
                     //if (item.Product.IsInventedByAnyOne())
                     result.Add(new Storage(item));
             return result;
@@ -271,19 +272,22 @@ namespace Nashet.EconomicSimulation
             return ShortName;
         }
 
-        internal bool isPoorStrata()
+        public bool isPoorStrata(PopUnit pop)
         {
-            return this == Farmers || this == Workers || this == Tribesmen || this == Soldiers;
+            return pop.WealthFactor <= pop.Country.AverageWealthFactor; //Encompass impoverished, low-mid, and middle class
+            //return this == Farmers || this == Workers || this == Tribesmen || this == Soldiers;
         }
 
-        internal bool isRichStrata()
+        public bool isRichStrata(PopUnit pop)
         {
-            return this == Aristocrats || this == Capitalists || this == Artisans;
+            
+            return pop.WealthFactor > pop.Country.AverageWealthFactor; //Encompass upper-mid and rich class
+            //return this == Aristocrats || this == Capitalists || this == Artisans;
         }
 
-        internal float getStrenght()
+        public float getStrenght()
         {
-            return strenght;
+            return strength;
         }
 
         public bool canBeUnemployed()
@@ -294,24 +298,34 @@ namespace Nashet.EconomicSimulation
         /// <summary>
         /// Returns true if can produce something by himself
         /// </summary>
-        internal bool isProducer()
+        public bool isProducer()
         {
             return this == Farmers || this == Tribesmen || this == Artisans;
         }
 
+       
         /// <summary>
         /// Makes sure that pops consume product in cheap-first order
         /// </summary>
-        internal static void sortNeeds()
+        public static void sortNeeds(Market market )
         {
+            
             foreach (var item in allPopTypes)
             {
-                item.everyDayNeeds.Sort(Storage.CostOrder);
-                item.luxuryNeeds.Sort(Storage.CostOrder);
+               
+                item.everyDayNeeds.Sort(delegate (Storage x, Storage y)
+                {
+                    return market.getCost(x).Get().CompareTo(market.getCost(y).Get());
+                });
+
+                item.luxuryNeeds.Sort(delegate (Storage x, Storage y)
+                {
+                    return market.getCost(x).Get().CompareTo(market.getCost(y).Get());
+                });
             }
         }
 
-        //internal bool HasJobsForThatPopTypeIn(Province province)
+        //public bool HasJobsForThatPopTypeIn(Province province)
         //{
         //    return true;
         //}
@@ -338,30 +352,30 @@ namespace Nashet.EconomicSimulation
         public bool CanDemoteTo(PopType targetType, Country Country)
         {
             if (this == Aristocrats)
-                if (targetType == Farmers && Country.Invented(Invention.Farming)
-                    || targetType == Soldiers && Country.Invented(Invention.ProfessionalArmy)
+                if (targetType == Farmers && Country.Science.IsInvented(Invention.Farming)
+                    || targetType == Soldiers && Country.Science.IsInvented(Invention.ProfessionalArmy)
                     || targetType == Tribesmen)
                     return true;
                 else
                     return false;
             else if (this == Artisans)
                 if (//|| targetType == PopType.Farmers && !Country.isInvented(Invention.Farming)
-                targetType == Soldiers && Country.Invented(Invention.ProfessionalArmy)
+                targetType == Soldiers && Country.Science.IsInvented(Invention.ProfessionalArmy)
                 || targetType == Workers
                 )
                     return true;
                 else
                     return false;
             else if (this == Capitalists)
-                if (targetType == Farmers && Country.Invented(Invention.Farming)
-                || targetType == Soldiers && Country.Invented(Invention.ProfessionalArmy)
+                if (targetType == Farmers && Country.Science.IsInvented(Invention.Farming)
+                || targetType == Soldiers && Country.Science.IsInvented(Invention.ProfessionalArmy)
                 || targetType == Artisans
                 )
                     return true;
                 else
                     return false;
             else if (this == Farmers)
-                if (targetType == Soldiers && Country.Invented(Invention.ProfessionalArmy)
+                if (targetType == Soldiers && Country.Science.IsInvented(Invention.ProfessionalArmy)
              || targetType == Tribesmen
              || targetType == Workers
                 )
@@ -379,14 +393,14 @@ namespace Nashet.EconomicSimulation
                     return false;
             else if (this == Tribesmen)
                 if (targetType == Workers
-                    || targetType == Farmers && Country.Invented(Invention.Farming)
-                    || targetType == Soldiers && Country.Invented(Invention.ProfessionalArmy))
+                    || targetType == Farmers && Country.Science.IsInvented(Invention.Farming)
+                    || targetType == Soldiers && Country.Science.IsInvented(Invention.ProfessionalArmy))
                     return true;
                 else
                     return false;
             else if (this == Workers)
                 if (targetType == Tribesmen
-                    || targetType == Soldiers && Country.Invented(Invention.ProfessionalArmy))
+                    || targetType == Soldiers && Country.Science.IsInvented(Invention.ProfessionalArmy))
                     return true;
                 else
                     return false;
