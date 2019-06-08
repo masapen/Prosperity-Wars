@@ -24,7 +24,10 @@ namespace Nashet.EconomicSimulation
         //protected Vector3 position;
         public Vector3 Position { get; protected set; }
 
-        
+        public float Distance(AbstractProvince target)
+        {
+            return Vector3.Distance(Position, target.Position);
+        }
 
         protected AbstractProvince(string name, int ID, Color colorID) : base(name)
         {

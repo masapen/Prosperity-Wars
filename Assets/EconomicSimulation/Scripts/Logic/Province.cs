@@ -55,6 +55,9 @@ namespace Nashet.EconomicSimulation
         private Country country;
 
         private readonly int fertileSoil;
+        private int capitalDistance = Int32.MaxValue;
+
+        public int CapitalDistance => capitalDistance;
 
         private readonly Dictionary<Province, MeshRenderer> bordersMeshes = new Dictionary<Province, MeshRenderer>();
         public TerrainTypes Terrain { get; protected set; }
@@ -67,7 +70,7 @@ namespace Nashet.EconomicSimulation
             country = World.UncolonizedLand;
             ProvinceColor = country.NationalColor.getAlmostSameColor();
             setResource(resource);
-            fertileSoil = 5000;
+            fertileSoil = Rand.getInt(1000, 10000);
 
         }
 
@@ -158,15 +161,12 @@ namespace Nashet.EconomicSimulation
         {
             if (cores.Count == 0)
                 return "none";
-            else
-                if (cores.Count == 1)
+            if (cores.Count == 1)
                 return cores[0].ShortName;
-            else
-            {
-                StringBuilder sb = new StringBuilder();
-                cores.ForEach(x => sb.Append(x.ShortName).Append("; "));
-                return sb.ToString();
-            }
+
+            StringBuilder sb = new StringBuilder();
+            cores.ForEach(x => sb.Append(x.ShortName).Append("; "));
+            return sb.ToString();
         }
 
         public IEnumerable<Country> AllCores()
@@ -175,6 +175,31 @@ namespace Nashet.EconomicSimulation
                 yield return core;
         }
 
+        public static Path PathBetween(Province a, Province b)
+        {
+            var path = World.Get.graph.GetShortestPath(a, b, province => province.Country == a.Country);
+            return path;
+            /*List<Province> pathList = new List<Province>();
+            var closestNeighbor = a
+                .neighbors
+                .FindAll(province => province.Country == b.Country)
+                .MinBy(province => province.Distance(b));
+
+            if (closestNeighbor == null)
+            {
+                return null;
+            }
+            
+            pathList.Add(closestNeighbor);
+            var nextPathPart = PathBetween(closestNeighbor, b);
+            if (nextPathPart == null)
+            {
+                return null;
+            }
+            
+            pathList.Concat(nextPathPart);
+            return pathList;*/
+        }
 
         /// <summary>
         /// Secedes province to Taker. Also kills old province owner if it was last province
@@ -226,6 +251,29 @@ namespace Nashet.EconomicSimulation
                     modifiers[TemporaryModifier.recentlyConquered].set(Date.Today.getNewDate(20));
                 else
                     modifiers.Add(TemporaryModifier.recentlyConquered, Date.Today.getNewDate(20));
+            //TODO: Calculate distance from capital for governing strength/control
+            if (country.Capital == here)
+            {
+                capitalDistance = 0;
+            }
+            else
+            {
+                //TODO: Somehow reuse Path class for calculating this.
+                var provincePath = PathBetween(here, country.Capital);
+                if (provincePath == null)
+                {
+                    capitalDistance = Int32.MaxValue;
+                }
+                else
+                {
+                    int pathWeight = provincePath.nodes.Sum(node => node.Province.Terrain == TerrainTypes.Mountains ? 2 : 1);
+                    capitalDistance = pathWeight;  
+                }
+            }
+            //TODO: Create Subclasses
+            //TODO: Create Public Servant
+            //TODO: Create Bureaucrat subclass under public servant, which directly affects control
+            //TODO: Have soldier presence factor into control at risk of "Martial Law" modifier
         }
 
         public void OnSecedeGraphic(Country taker)
@@ -239,7 +287,7 @@ namespace Nashet.EconomicSimulation
 
         public int howFarFromCapital()
         {
-            return 0;
+            return capitalDistance;
         }
 
         public Dictionary<TemporaryModifier, Date> getModifiers()

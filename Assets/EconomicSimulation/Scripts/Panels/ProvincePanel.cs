@@ -140,7 +140,11 @@ namespace Nashet.EconomicSimulation
             }
             sb.Append("\nPopulation (with families): ").Append(Game.selectedProvince.getFamilyPopulation());
 
-            sb.Append("\nAverage loyalty: ").Append(Game.selectedProvince.AllPops.GetAverageProcent(x => x.loyalty));
+            if (Game.selectedProvince.Country.Capital != null)
+            {
+                sb.Append("\nDistance from ").Append(Game.selectedProvince.Country.Capital.ShortName).Append(": ").Append(Game.selectedProvince.CapitalDistance);
+            }
+            //sb.Append("\nAverage loyalty: ").Append(Game.selectedProvince.AllPops.GetAverageProcent(x => x.loyalty));
             //sb.Append("\nMajor culture: ").Append(Game.selectedProvince.getMajorCulture());
             sb.Append("\nGDP: ").Append(Game.selectedProvince.getGDP());
             sb.Append("\nResource: ");

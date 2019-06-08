@@ -386,11 +386,9 @@ namespace Nashet.EconomicSimulation
         public MoneyView getPossibleProfit(Market market)
         {
             if (market
-                .
-                getDemandSupplyBalance(
-                basicProduction
-                .
-                Product, false) == Options.MarketZeroDSB)
+                .getDemandSupplyBalance(
+                basicProduction.Product,
+                false) == Options.MarketZeroDSB)
                 return new MoneyView(0); // no demand for result product
             MoneyView income = market.getCost(basicProduction);
 

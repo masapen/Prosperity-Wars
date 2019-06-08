@@ -973,6 +973,12 @@ namespace Nashet.EconomicSimulation
         {
             // it's in game.simulate
             var home = Country;
+            if (home.GDP.Get() <= 0m)
+            {
+                wealthFactor = 0.0f;
+                return;
+            }
+            
             float gdpRatio = (float) (Cash.Get() / home.getGDP().Get());
             float popRatio = population.Get() / (float)home.Provinces.AllPops.Sum(y => y.population.Get());
             wealthFactor = gdpRatio / popRatio;

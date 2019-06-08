@@ -50,6 +50,7 @@ namespace Nashet.EconomicSimulation
         public Culture Culture { get; protected set; }
         public Color NationalColor { get; protected set; }
         private Province capital;
+
         public bool IsAlive { get; protected set; } = true;
 
         private readonly Money soldiersWage = new Money(0m);

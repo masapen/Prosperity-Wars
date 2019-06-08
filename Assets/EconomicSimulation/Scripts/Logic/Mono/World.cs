@@ -232,6 +232,7 @@ namespace Nashet.EconomicSimulation
             return false;
         }
 
+        //TODO: CreateCountry() for secession/ancient tribe reformation mid-game
         public static void CreateCountries()
         {
             var countryNameGenerator = new CountryNameGenerator();

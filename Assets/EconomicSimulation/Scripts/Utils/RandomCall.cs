@@ -19,6 +19,11 @@ namespace Nashet.Utils
             return (float)(Get.NextDouble()) * (maxValue - minValue) + minValue;
         }
 
+        public static int getInt(int minValue, int maxValue)
+        {
+            return Get.Next(minValue, maxValue);
+        }
+
         /// <summary>
         /// Higher procent - higher chance
         /// </summary>

@@ -61,11 +61,16 @@ namespace Nashet.EconomicSimulation
         public void consume(Country owner)
         {
             var needs = getRealNeeds(owner);
-
+            //TODO: Make access to country storage limited to forts in province
             float shortage = 0f;
+            Path supplyTrainPath =
+                World.Get.graph.GetShortestPath(origin.Province, owner.Capital, province => province.Country == owner);
+
+            int distancePenalty = supplyTrainPath == null ? 1000000 : (int) supplyTrainPath.length;
             Storage realConsumption = Storage.EmptyProduct;
             foreach (var need in needs)
             {
+                need.Multiply(distancePenalty);
                 if (owner.countryStorageSet.has(need))
                 {
                     if (need.isAbstractProduct())
@@ -97,8 +102,8 @@ namespace Nashet.EconomicSimulation
 
             if (morale.isBiggerThan(Procent.HundredProcent))
                 morale.Set(1f);
-            //if (getPopUnit().loyalty.isSmallerThan(Options.PopMinLoyaltyToMobilizeForGovernment))
-            //    Country.demobilize(x => x.getPopUnit() == this);
+            if (getPopUnit().loyalty.isSmallerOrEqual(Procent.Zero))
+                 owner.demobilize(x => x == this);
         }
 
         public StorageSet getConsumption()
@@ -149,7 +154,7 @@ namespace Nashet.EconomicSimulation
             return morale;
         }
 
-        //private float getStrenght()
+        //private float getStrength()
         //{
         //    return Type.getStrenght(); // bonus
         //}
@@ -158,7 +163,7 @@ namespace Nashet.EconomicSimulation
             return getSize() * origin.Type.getStrenght() * armyStrenghtModifier;
         }
 
-        public PopType Type { get { return origin.Type; } }
+        public PopType Type => origin.Type;
 
         //public PopType Type
         //{

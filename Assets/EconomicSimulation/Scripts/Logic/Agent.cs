@@ -275,6 +275,7 @@ namespace Nashet.EconomicSimulation
                         && payer.Country != incomeReceiver.Country
                         && payer is Factory) // pay taxes in enterprise jurisdiction only if it's factory
                     {
+                        //TODO: Scale amount paid by control over payer's province, then scaled by payer opinion of payee
                         var payed = payer.Country.TakeIncomeTaxFrom(incomeReceiver, howMuchPayReally, false);
                         howMuchPayReally.Subtract(payed);//and reduce taxable base
                     }
